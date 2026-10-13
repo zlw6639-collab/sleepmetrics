@@ -211,7 +211,7 @@ SLEEPMETRICS_REAL_DATA=/path/to/records.json npm run regression
 
 ## Size and performance
 
-- **Published tarball: 27 kB** (64 kB unpacked, 13 files) — no build output, no dependencies.
+- **Published tarball: 47.6 kB** (115 kB unpacked, 19 files) — no build output, no dependencies.
 - **Pure ESM with no Node-only APIs** (`fs` / `net` / `process` / `Buffer`) ⇒ it also runs in the browser.
 - Newest syntax used: `??`, `?.`, and a single `Array.prototype.at` ⇒ Node 16.6+ / browsers from 2022.
   `engines` says `>=20` on purpose (18 is EOL); it is a conservative floor, not a hard requirement.
