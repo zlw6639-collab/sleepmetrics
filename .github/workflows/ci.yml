@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # 语法不过 ⇒ 后面全是假的（教训见 AGENTS.md 硬规矩 6）
+      - name: Syntax gate
+        run: node --check bin/sleepmetrics.js
+
+      # 逐个文件跑：批量 `node --test test/` 在受限环境里会 spawn EPERM
+      - name: Tests
+        run: npm test
+
+      # 回归闸门：没有私有数据时**自动 skip**，所以 CI 天然是绿的（数据只在维护者机器上）
+      - name: Regression gate (skips without private data)
+        run: npm run regression
+
+      # README 里的内部链接必须命中发布物，否则 npm 页面上就是 404
+      - name: README links must ship
+        run: npm run check:links
+
+      # 最后看一眼：到底会发布哪些文件、多大
+      - name: Packaging check
+        run: npm pack --dry-run

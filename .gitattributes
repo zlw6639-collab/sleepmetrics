@@ -1,0 +1,4 @@
+# 跨平台行尾一致性 —— 仓库内统一 LF。
+# CI 同时跑 ubuntu + windows（.github/workflows/ci.yml）；本项目只有 .js / .md / .json，
+# 都不需要 CRLF。固定 eol=lf 可消除 Windows 上 autocrlf=true 带来的转换警告与 diff 噪音。
+* text=auto eol=lf

@@ -1,0 +1,62 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { circMean, circDiff, circStats, dayOf, clockMin, dayStartSec, SEC_PER_DAY } from '../src/time.js';
+
+test('circDiff：跨午夜走 shorter 口径（10 与 1430 相差 20 分钟，不是 -1420）', () => {
+  assert.equal(circDiff(10, 1430), 20);
+  assert.equal(circDiff(1430, 10), -20);
+  assert.equal(circDiff(0, 0), 0);
+  assert.equal(circDiff(720, 0), 720);
+});
+
+test('circMean：23:50 与 00:10 的均值是 00:00（线性平均会算成 12:00）', () => {
+  const m = circMean([1430, 10]);
+  assert.ok(Math.abs(circDiff(m, 0)) < 1e-6, `实际 ${m}（绕环距 0 点 ${circDiff(m, 0)} 分钟）`);
+  // 反面教材：算术平均给出 720 = 12:00
+  assert.equal((1430 + 10) / 2, 720);
+});
+
+test('circMean：单点原样返回；空输入返回 null', () => {
+  assert.ok(Math.abs(circDiff(circMean([123]), 123)) < 1e-9);
+  assert.equal(circMean([]), null);
+});
+
+test('dayOf / clockMin 按传入 tz 归日，不写死 +8', () => {
+  const ts = Date.parse('2026-03-01T23:30:00+08:00') / 1000;
+  assert.equal(dayOf(ts, 8), '2026-03-01');
+  assert.equal(clockMin(ts, 8), 23 * 60 + 30);
+  assert.equal(dayOf(ts, 0), '2026-03-01'); // UTC 下是 15:30，仍是同日
+  assert.equal(clockMin(ts, 0), 15 * 60 + 30);
+});
+
+test('dayStartSec 与 dayOf 互为逆（tz=8）', () => {
+  const start = dayStartSec('2026-03-05', 8);
+  assert.equal(dayOf(start, 8), '2026-03-05');
+  assert.equal(dayOf(start - 1, 8), '2026-03-04');
+  assert.equal(dayStartSec('2026-03-06', 8) - start, SEC_PER_DAY);
+});
+
+test('circStats：完全一致的一组 ⇒ R = 1、sd ≈ 0', () => {
+  const s = circStats([120, 120, 120, 120]);
+  assert.equal(s.n, 4);
+  assert.ok(Math.abs(circDiff(s.mean, 120)) < 1e-9);
+  assert.ok(s.sd < 1e-9);
+  assert.ok(Math.abs(s.R - 1) < 1e-9);
+});
+
+test('circStats：跨午夜的一组也能给出正确均值与合理离散度', () => {
+  const s = circStats([1430, 10]); // 23:50 与 00:10
+  assert.ok(Math.abs(circDiff(s.mean, 0)) < 1e-6);
+  assert.ok(s.sd > 0 && s.sd < 60); // 两点相隔 20 分钟 ⇒ 标准差应在几十分钟内
+  assert.ok(s.R > 0 && s.R < 1);
+});
+
+test('circStats：接近均匀分布 ⇒ sd = null（宁可说"没有意义"，也不给像数的胡说值）', () => {
+  const s = circStats([0, 360, 720, 1080]); // 四个正交方向 ⇒ R = 0
+  assert.equal(s.sd, null);
+  assert.ok(s.R < 1e-9);
+});
+
+test('circStats：空输入 ⇒ 全 null', () => {
+  assert.deepEqual(circStats([]), { n: 0, mean: null, sd: null, R: null });
+});

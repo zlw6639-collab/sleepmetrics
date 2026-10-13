@@ -1,0 +1,27 @@
+# Citation File Format —— GitHub 会据此显示「Cite this repository」。
+# 它**不随 npm 包发布**（package.json 的 files 里没有它）：服务的是仓库访客，不是安装者。
+cff-version: 1.2.0
+message: "If you use this library in academic work, please cite it as below."
+title: "sleepmetrics"
+abstract: >-
+  Standard sleep metrics in pure JavaScript: sleep regularity index (SRI) and
+  circadian phase (MSFsc / social jetlag), plus a data-health audit and a
+  rule-layer suggestion engine. Zero dependencies, no build step, no network,
+  and the library core touches neither the filesystem nor the clock.
+type: software
+authors:
+  - name: "猫咖没有猫猫"
+license: MIT
+version: 0.1.0
+date-released: "2026-10-13"
+repository-code: "https://github.com/zlw6639-collab/sleepmetrics"
+url: "https://github.com/zlw6639-collab/sleepmetrics"
+keywords:
+  - sleep
+  - actigraphy
+  - sleep-regularity
+  - sri
+  - circadian-rhythm
+  - social-jetlag
+  - msfsc
+  - sleep-metrics

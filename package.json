@@ -1,0 +1,48 @@
+{
+  "name": "sleepmetrics",
+  "version": "0.1.0",
+  "description": "Standard sleep metrics in pure JavaScript: sleep regularity index (SRI) and circadian phase (MSFsc / social jetlag). Zero dependencies, no build step, no network, no filesystem.",
+  "type": "module",
+  "license": "MIT",
+  "author": "猫咖没有猫猫",
+  "repository": { "type": "git", "url": "git+https://github.com/zlw6639-collab/sleepmetrics.git" },
+  "homepage": "https://github.com/zlw6639-collab/sleepmetrics#readme",
+  "bugs": { "url": "https://github.com/zlw6639-collab/sleepmetrics/issues" },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "bin": {
+    "sleepmetrics": "bin/sleepmetrics.js"
+  },
+  "files": [
+    "src",
+    "data",
+    "bin",
+    "README.md",
+    "HOLIDAYS.md",
+    "DISCLAIMER.md",
+    "ROADMAP.md",
+    "NON-GOALS.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node test/time.test.js && node test/records.test.js && node test/sri.test.js && node test/phase.test.js && node test/rest.test.js && node test/suggest.test.js && node test/audit.test.js && node test/rhythm.test.js && node test/regression.test.js",
+    "test:one": "node test/sri.test.js",
+    "regression": "node test/regression.test.js",
+    "check:links": "node scripts/check-links.mjs"
+  },
+  "keywords": [
+    "sleep",
+    "actigraphy",
+    "sri",
+    "sleep-regularity",
+    "msfsc",
+    "social-jetlag",
+    "circadian"
+  ],
+  "dependencies": {}
+}

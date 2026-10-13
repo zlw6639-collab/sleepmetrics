@@ -1,0 +1,16 @@
+# ★ 红线（项目方案 §五 第 1 条）：真实健康数据与凭据绝不进仓库
+raw/
+mi-auth.json
+*.log
+
+# 本机备份文件（.bak-<原因> 约定）
+*.bak
+*.bak-*
+
+# Node
+node_modules/
+npm-debug.log*
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
