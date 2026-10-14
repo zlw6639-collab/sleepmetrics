@@ -158,6 +158,14 @@ and the last section lists what will **not** happen.
 
 ## Later / on demand
 
+- **`toEpoch()` as a strict, exported parser?** `TIMESTAMPS.md` ships a **verified** snippet
+  (`Date.UTC(...) − offset`, which never consults the host timezone). Promoting it into the library
+  would give every adapter a safe default, and it would **not** violate "the library does not know vendor
+  formats" (`NON-GOALS.md` §5): it parses **timestamps**, not **sources** — it takes ISO-with-offset or
+  an explicit `hoursOffset`, and never guesses from the format.
+  ⚠️ **The open question is adoption, not correctness**: a parser that *rejects* an offset-less
+  `YYYY-MM-DD` pushes people straight back to raw `Date.parse`, which is worse. Whatever ships has to be
+  **easier than the unsafe thing**, not merely safer than it.
 - Gadgetbridge export adapter
 - Apple Health export adapter
 - **String-typed stage states** (`'deep' | 'light' | 'rem' | 'awake'`, numeric codes kept for

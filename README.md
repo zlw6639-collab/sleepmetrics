@@ -86,7 +86,13 @@ Adapters for vendor formats (Xiaomi / Gadgetbridge / Apple Health / CSV) are del
 part of this package: mapping someone else's field names is a different job, and each source
 changes on its own schedule.
 
-> ⚠️ **Those `state` codes are a vendor's private encoding, not a standard.** `2` = deep · `3` = light ·
+> ⚠️ **Before you write the adapter: `bed`/`wake` are epoch seconds, and getting there is the most
+> error-prone step in the pipeline.** [`TIMESTAMPS.md`](TIMESTAMPS.md) covers it with measured examples
+> and a verified snippet. The short version: **only a bare `YYYY-MM-DD` parses as UTC** — every other
+> form without an offset parses as *local*, so `'2026-03-01'` and `'2026-03-01T00:00'` end up
+> **8 hours apart**. Nothing throws; it just moves a night across midnight and changes SRI.
+>
+> ⚠️ **And those `state` codes are a vendor's private encoding, not a standard.** `2` = deep · `3` = light ·
 > `4` = REM · `5` = awake is **Xiaomi's** numbering, not AASM/PSG. Anything else you own that uses 1–5
 > (Gadgetbridge exports, some Apple Health exports, a hand-made CSV) will land **inside the valid range
 > with a different meaning**, and **no type system can catch that** — `state: 2` is always a legal
