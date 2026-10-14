@@ -30,8 +30,15 @@ jobs:
       - name: Tests
         run: npm test
 
-      # 回归闸门：没有私有数据时**自动 skip**，所以 CI 天然是绿的（数据只在维护者机器上）
-      - name: Regression gate (skips without private data)
+      # ★ 合成锚点闸门 —— **不依赖任何真实数据，所以 CI 上一定真跑**。
+      # 为什么要它（外部评审 2026-10-14）：原来只有下面那一步，而它会 skip ⇒ CI 的"闸门绿灯"是假的，
+      # 看起来像"通过了"，其实**一次都没执行**。这个库最反对的就是"通过信号本身是假的"。
+      - name: Synthetic anchor gate (always runs)
+        run: node test/anchor-synthetic.test.js
+
+      # 真实数据锚点（74.108 / 65.972 / 86.03）：私有数据**不在仓库里** ⇒ 这一步在 CI 上会 **skip**（设计如此）。
+      # 它只在本机有意义；绿灯的含义由上面那一步兜住。
+      - name: Regression gate against real data (skips in CI by design)
         run: npm run regression
 
       # README 里的内部链接必须命中发布物，否则 npm 页面上就是 404

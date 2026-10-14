@@ -38,7 +38,8 @@ import { DISCLAIMER } from './disclaimer.js';
  * @returns {object|null} 不足（缺工作日或缺休息日）时返回带 `insufficient: true` 的对象
  */
 export function computePhase(records, isRest, { windowDays = 30, tz = 8 } = {}) {
-  const last = records?.at(-1);
+  if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（与 records.js 顶部那条规则一致）
+  const last = records.at(-1);
   if (!last) return null;
 
   const cutoff = last.wake - windowDays * SEC_PER_DAY;

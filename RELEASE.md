@@ -28,7 +28,7 @@ steps are portable.
 node --check bin\sleepmetrics.js
 
 # b) tests, one file at a time (batch `node --test test/` may hit EPERM in a sandbox)
-foreach ($f in 'time','records','sri','phase','rest','suggest','audit','rhythm','aside-guard','regression') {
+foreach ($f in 'time','records','sri','phase','rest','suggest','audit','rhythm','aside-guard','anchor-synthetic','regression') {
   node "test\$f.test.js" | Select-String 'pass |fail '
 }
 

@@ -55,6 +55,18 @@ const currentHour = () => {
 };
 
 /**
+ * `--json` 的**结构版本**。外部评审提出（2026-10-14）：输出里没有版本字段 ⇒ 一旦有人写脚本消费它，
+ * 结构改一次就 break 他们一次 —— 而这正是本项目最反对的「**悄悄给错**」。
+ *
+ * ⇒ 消费方拿到 `schemaVersion` 就能在结构变化时**显式**发现，而不是默默读到不同的字段。
+ * ⚠️ 加这个字段**本身也是契约变更**，只是 0.1.1 之前没有任何消费者 ⇒ **此刻加是唯一的零成本时机**。
+ * ⚠️ 规矩不变：`--json` 里**不许**出现彩蛋、告示、调试信息 —— 版本号是契约的一部分，不是花样。
+ * 变更规则：**增字段**（向后兼容）⇒ 版本号不动，但在 CHANGELOG 里写明；
+ *          **改名 / 删字段 / 改语义** ⇒ 版本号 +1。
+ */
+const SCHEMA_VERSION = 1;
+
+/**
  * 确定性抽样：`(日期 + 数据特征)` 相同 ⇒ 结果永远相同。
  *
  * 为什么需要它：**每次都出现的东西不是彩蛋，是固定输出**。时刻类的旁白（深夜 / 本该睡着）
@@ -268,6 +280,18 @@ function parseArgs(argv) {
   return out;
 }
 
+/**
+ * 读 JSON 文件 —— **顺手去掉 UTF-8 BOM**。
+ *
+ * 外部评审实测（2026-10-14）：Windows 上的常见写文件方式（记事本、Excel 导出、
+ * PowerShell 的 `Set-Content -Encoding UTF8`）**会写入 BOM**，而 `JSON.parse` 遇到它直接抛
+ * `Unexpected token '\uFEFF'` —— 症状看起来像「文件坏了」，其实只是多了一个编码前缀。
+ *
+ * ⚠️ 只在这一层去 BOM：**库本体不收文件，也就没有 BOM 问题**（`NON-GOALS.md` §4）。
+ * 这正是「读文件只允许发生在 bin/」那条边界带来的好处。
+ */
+const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
+
 const args = parseArgs(process.argv.slice(2));
 
 // `--help` / `-h` / `--version` / `-v` 是**用户主动要的**，按惯例退出码 0 —— 它们不是错误。
@@ -296,7 +320,7 @@ if (!args.file || !['sri', 'phase', 'audit'].includes(args.cmd)) {
 
 let records;
 try {
-  records = JSON.parse(fs.readFileSync(args.file, 'utf8'));
+  records = readJson(args.file);
 } catch (e) {
   console.error(`[sleepmetrics] 读不了记录文件：${e.message}`);
   process.exit(1);
@@ -327,7 +351,7 @@ if (args.cmd === 'audit') {
   const r = auditRecords(records);
   const { summary, issues } = r;
   if (args.json) {
-    console.log(JSON.stringify(r, null, 2));
+    console.log(JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...r }, null, 2));
   } else {
     console.log(`数据体检   ${summary.records} 条记录 · ${summary.days} 天 · error ${summary.bySeverity.error} · warn ${summary.bySeverity.warn} · info ${summary.bySeverity.info}`);
     if (issues.length === 0) {
@@ -360,7 +384,7 @@ if (args.cmd === 'audit') {
   if (args.json) {
     // ⚠️ `--json` 是机器契约：**不带 --influence 时顶层输出一字不变**。
     //    `influence` 只在调用方**显式要求**时才出现 —— 不是偷偷塞进去的花样。
-    const base = { ...r, window: args.window ?? null, minDayMinutes: args.minDayMinutes };
+    const base = { schemaVersion: SCHEMA_VERSION, ...r, window: args.window ?? null, minDayMinutes: args.minDayMinutes };
     console.log(JSON.stringify(loo ? { ...base, influence: loo.out } : base, null, 2));
   } else {
     console.log(`SRI            ${r.sri.toFixed(1)}   （完全规律 = 100，完全随机 = 0；与睡眠时长不相关）`);
@@ -390,7 +414,7 @@ if (args.cmd === 'audit') {
   }
   let table;
   try {
-    table = JSON.parse(fs.readFileSync(args.holidays, 'utf8'));
+    table = readJson(args.holidays);
   } catch (e) {
     console.error(`[sleepmetrics] 读不了节假日表：${e.message}`);
     process.exit(1);
@@ -402,7 +426,7 @@ if (args.cmd === 'audit') {
     process.exit(2);
   }
   if (args.json) {
-    console.log(JSON.stringify(p, null, 2));
+    console.log(JSON.stringify({ schemaVersion: SCHEMA_VERSION, ...p }, null, 2));
   } else {
     console.log(`MSW  （工作日睡眠中点）  ${minToClock(p.msw)}`);
     console.log(`MSF  （休息日睡眠中点）  ${minToClock(p.msf)}`);

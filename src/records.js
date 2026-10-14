@@ -24,8 +24,14 @@ import { dayOf } from './time.js';
  * @returns {Array<object>} 新数组（不修改入参）
  */
 export function normalize(records, tz = 8) {
+  // ⚠️ **非数组输入统一返回 `[]`**（不抛、不猜）。外部评审实测（2026-10-14）原来三种行为不一致：
+  //    `normalize(42)` 抛 TypeError、`normalize('abc')` 返回 []、`normalize(null)` 返回 []。
+  //    规则统一为：**返回数组的函数（normalize / allSleep / mainSleep / dailyMain）拿到非数组 ⇒ `[]`；
+  //    返回对象或数值的函数（computeSRI / sriLastN / computePhase / computeIS / computeIV…）⇒ `null`。**
+  //    `auditRecords()` 是例外 —— 它返回**诊断报告**，所以照旧给出 `input.not-array` 那条 error。
+  if (!Array.isArray(records)) return [];
   const out = [];
-  for (const r of records ?? []) {
+  for (const r of records) {
     if (r === null || typeof r !== 'object') continue;
     // ⚠️ tz 必须校验：`'xx' * 3600` = NaN ⇒ `new Date(NaN).toISOString()` 抛 RangeError。
     //    非数字一律回退到调用方给的默认值 —— 拦在这一层，下游（sri / phase / audit）就不必各防一遍。
@@ -36,13 +42,19 @@ export function normalize(records, tz = 8) {
     if (!(bed > 0) || !(wake > 0)) continue;
     const dur = r.dur !== undefined && r.dur !== null ? Number(r.dur) : Math.round((wake - bed) / 60);
     if (!Number.isFinite(dur)) continue;
+    // ⚠️ stages 必须**逐项**体检：`stages: [null]` 这种（外部评审实测 2026-10-14）会让下游直接崩，
+    //    而它看起来只是「一条有点怪的数据」。这里**丢掉无效元素**（不崩），
+    //    由 `auditRecords()` 负责把「有多少 stage 不可用」说出来 —— 脏数据要**可见**，但不必**致命**。
+    const rawStages = Array.isArray(r.stages) ? r.stages : [];
+    const stages = rawStages.filter((s) => s !== null && typeof s === 'object'
+      && Number.isFinite(Number(s.start)) && Number.isFinite(Number(s.end)) && Number.isFinite(Number(s.state)));
     out.push({
       ds: dayOf(wake, t),
       bed,
       wake,
       dur,
       tz: t,
-      stages: Array.isArray(r.stages) && r.stages.length ? r.stages : null,
+      stages: stages.length ? stages : null,
     });
   }
   return out.sort((a, b) => a.bed - b.bed);

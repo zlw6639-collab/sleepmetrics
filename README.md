@@ -188,6 +188,12 @@ These are the places where a reasonable-looking rewrite silently produces wrong 
    leftover isolated day giving 0 ⇒ **5 pairs**. Read `pairs` and `skipped` together: `sri === null`
    means "no adjacent valid day-pair at all", which is a statement about your **data**, not your sleep.
    → `sri.test.js`: *"中间缺一整晚 ⇒ 不成对、SRI 为 null"* / *"LOO：孤立自然日 isolated=true 且 Δ=0"*
+   ⚠️ **Short windows jitter — do not read a small drop as a trend.** Measured on real data (222 days),
+   **consecutive 7-night windows differ by a median of 2.3 SRI points (p90 = 7.4)** — while the
+   leave-one-day-out influence on the *full* 212-day window tops out at **0.7 points**. So a 1–3 point
+   drop between two 7-night windows is **the window moving, not the person**. If you want to speak
+   about a change in regularity, use a longer window or compare **non-overlapping** blocks — not two
+   short ones that share most of their nights.
 7. **`tz` is a fixed offset in hours — not a timezone name, and the library has no DST table.**
    `tz` is read **per record**, so the correct way to handle daylight saving is to carry the offset that
    was *actually in force for that record*: a summer night in a region that is `+2` in summer and `+1` in

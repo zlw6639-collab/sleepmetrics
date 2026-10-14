@@ -42,6 +42,7 @@ import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec } from './time.js';
  * @returns {Map<string, Uint8Array>} 自然日 → 1440 长度序列
  */
 export function buildGrid(records, tz = 8) {
+  if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（原来是 `records ?? []`，传数字会抛 not iterable）
   const grid = new Map();
   const ensure = (ds) => {
     if (!grid.has(ds)) grid.set(ds, new Uint8Array(MIN_PER_DAY));
@@ -61,6 +62,10 @@ export function buildGrid(records, tz = 8) {
     if (r === null || typeof r !== 'object') continue;
     if (r.stages && r.stages.length) {
       for (const st of r.stages) {
+        // ⚠️ stages 里的脏元素（`null` / 非对象）也要跳过 —— 外部评审实测（2026-10-14）：
+        //    `stages: [null]` 会让这里直接抛 TypeError。`normalize()` 现在会先过滤，
+        //    但 `buildGrid()` 是导出函数、可能被直接调用 ⇒ 这一层也得守住。
+        if (st === null || typeof st !== 'object') continue;
         mark(Number(st.start), Number(st.end), Number(st.state) === 5 ? 0 : 1);
       }
     } else {
@@ -118,6 +123,7 @@ const sriOf = (same, pairCount) => (pairCount ? -100 + (200 * same) / (pairCount
 
 /** @param {Array<object>} records @param {{minDayMinutes?: number, tz?: number}} [opts] */
 export function computeSRI(records, opts = {}) {
+  if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（见 records.js 顶部那条统一规则）
   const { days, skipped, dayPairs } = decompose(records, opts);
   const same = dayPairs.reduce((n, p) => n + p.same, 0);
 
@@ -151,6 +157,7 @@ function windowSlice(allSegs, mainSegs, w) {
  * @param {{minDayMinutes?: number, tz?: number}} [opts]
  */
 export function sriLastN(allSegs, mainSegs, w, opts = {}) {
+  if (!Array.isArray(allSegs)) return null;   // 非数组 ⇒ 不猜
   return computeSRI(windowSlice(allSegs, mainSegs, w), opts);
 }
 
@@ -173,6 +180,7 @@ export function sriLastN(allSegs, mainSegs, w, opts = {}) {
  * @returns {{sri: number|null, days: number, pairs: number, out: Array<{date: string, sri: number|null, delta: number|null, pairs: number, isolated: boolean}>}}
  */
 export function sriLeaveOneOut(allSegs, mainSegs, w, opts = {}) {
+  if (!Array.isArray(allSegs)) return null;   // 非数组 ⇒ 不猜
   const { days, dayPairs } = decompose(windowSlice(allSegs, mainSegs, w), opts);
   const baseSame = dayPairs.reduce((n, p) => n + p.same, 0);
   const base = sriOf(baseSame, dayPairs.length);

@@ -88,8 +88,10 @@ consumes the **result**: pass a category into `chronotype(msfsc, { cuts })` or
 owning a questionnaire or drawing a conclusion.
 
 > Worth knowing: `npm search mctq`, `morningness eveningness` and `epworth sleepiness` all return
-> **zero** results (checked 2026-10-13), and `chronotype questionnaire` returns form builders. The
-> vacuum here is as real as the actigraphy one — which is exactly why the boundary above matters.
+> **zero** results (re-checked 2026-10-14), and `chronotype questionnaire` returns form builders.
+> ⚠️ **One correction to the earlier claim:** `npm search actigraphy` **does** return this package —
+> since 0.1.0 (published 2026-10-13) that space is no longer empty, it is just **very thin**. The
+> boundary below still matters for the same reason; only the "vacuum" metaphor needed retiring.
 
 ## 9. A "sleep score"
 

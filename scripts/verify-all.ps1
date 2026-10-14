@@ -27,7 +27,7 @@ foreach ($f in $srcFiles) { node --check $f.FullName 2>&1 | Out-Null; if ($LASTE
 Check 'A1 语法门' ($syntaxBad.Count -eq 0) "$($srcFiles.Count) 个文件，失败 $(($syntaxBad -join ','))"
 
 # A2 全部测试
-$tests = @('time', 'records', 'sri', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'aside-guard', 'regression')
+$tests = @('time', 'records', 'sri', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'aside-guard', 'anchor-synthetic', 'regression')
 $testBad = @()
 foreach ($t in $tests) { node "test\$t.test.js" > $null 2>&1; if ($LASTEXITCODE -ne 0) { $testBad += $t } }
 Check 'A2 测试' ($testBad.Count -eq 0) "$($tests.Count) 个文件，失败 $(($testBad -join ','))"
@@ -55,7 +55,8 @@ $jsonOk = $false; $keys = '(未跑)'
 if (Test-Path $rec) {
   node bin\sleepmetrics.js sri $rec --json > "$env:TEMP\v_sri.json" 2>&1
   $keys = (node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync(process.env.TEMP+'/v_sri.json','utf8'))).join(','))" 2>&1)
-  $jsonOk = ($keys -eq 'sri,days,pairs,from,to,skipped,window,minDayMinutes')
+  $jsonOk = ($keys -eq 'schemaVersion,sri,days,pairs,from,to,skipped,window,minDayMinutes')
+  $jsonNote = "schemaVersion=$($keys -split ',' | Where-Object { $_ -eq 'schemaVersion' } | Measure-Object | Select-Object -ExpandProperty Count)"
 }
 Check 'A6 --json 契约' $jsonOk $keys
 
