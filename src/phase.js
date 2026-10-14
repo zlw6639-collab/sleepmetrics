@@ -32,10 +32,32 @@ import {
 import { DISCLAIMER } from './disclaimer.js';
 
 /**
- * @param {Array<object>} records 规范化后的**主睡眠**记录（按 bed 升序）
+ * `computePhase()` 的返回。**所有时刻都是「当天 0 点起的分钟数」**（跨午夜继续累加，可能 > 1440）。
+ * 数据不足时返回 `{insufficient: true, windowDays, nW, nF}` —— 其余字段此时**不存在**。
+ * @typedef {object} PhaseResult
+ * @property {number} windowDays 窗口天数（以最后一条主睡眠为锚往回数）
+ * @property {number} nW 窗口内工作日数
+ * @property {number} nF 窗口内休息日数
+ * @property {number} soW 工作日入睡时刻（**圆周均值**，分钟）
+ * @property {number} soF 休息日入睡时刻（圆周均值，分钟）
+ * @property {number} sdW 工作日平均睡眠时长（分钟）
+ * @property {number} sdF 休息日平均睡眠时长（分钟）
+ * @property {number} sdWeek 整周加权平均时长（分钟）
+ * @property {number} msw 工作日睡眠中点
+ * @property {number} msf 休息日睡眠中点
+ * @property {number} msfsc 校正后的 MSF —— ⚠️ **本库恒按自由日算**（见文件顶部那条已知口径差）
+ * @property {number} sjl 社交时差 `MSF − MSW`（分钟）
+ * @property {number} sjlSc 用 `MSFsc` 算的社交时差（分钟）
+ * @property {string} from 窗口内第一天（`YYYY-MM-DD`）
+ * @property {string} to 窗口内最后一天
+ * @property {boolean} [insufficient] `true` = 窗口内缺工作日或缺休息日 ⇒ 算不出相位
+ */
+
+/**
+ * @param {import('./records.js').Record[]} records 规范化后的**主睡眠**记录（按 bed 升序）
  * @param {(ds: string) => boolean} isRest 休息日判定函数（由调用方注入，见 rest.js）
  * @param {{windowDays?: number, tz?: number}} [opts]
- * @returns {object|null} 不足（缺工作日或缺休息日）时返回带 `insufficient: true` 的对象
+ * @returns {PhaseResult|null} 不足（缺工作日或缺休息日）时返回带 `insufficient: true` 的对象
  */
 export function computePhase(records, isRest, { windowDays = 30, tz = 8 } = {}) {
   if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（与 records.js 顶部那条规则一致）

@@ -8,6 +8,17 @@
  * 时区：每条记录的 `tz` 优先（小时偏移，如 +8）；函数默认 8 只为兼容本机历史数据。
  */
 
+/**
+ * `circStats()` 的返回 —— 圆周统计（均值 · 圆周标准差 · 合向量长度）。
+ * ⚠️ 四个正交方向的合向量在浮点下不会**正好**为零 ⇒ `R` 太小则返回 `null`，
+ * 而不是给出"看着像数的胡说值"（曾经算出 1976 分钟那种）。
+ * @typedef {object} CircStats
+ * @property {number} n 样本数
+ * @property {number|null} mean 圆周均值（分钟 0..1439）；空输入为 `null`
+ * @property {number|null} sd 圆周标准差（分钟）
+ * @property {number|null} R 合向量长度（0~1，越大越集中）；发散时为 `null`
+ */
+
 /** 一天秒数 */
 export const SEC_PER_DAY = 86400;
 
@@ -87,7 +98,7 @@ export const circDiff = (a, b) => {
  * ⚠️ `R` 小于约 0.3 时标准差的意义已经很弱 —— 所以它和 `R` 一起返回，**别只看 `sd`**。
  *
  * @param {number[]} mins 当日分钟数数组
- * @returns {{n: number, mean: number|null, sd: number|null, R: number|null}}
+ * @returns {CircStats}
  */
 export function circStats(mins) {
   const n = Array.isArray(mins) ? mins.length : 0;

@@ -55,9 +55,9 @@ import { dayOf } from './time.js';
 
 /**
  * 规范化：丢掉 bed/wake 非正的记录，补 `dur`，按 `bed` 升序。
- * @param {Array<object>} records 标准记录数组
+ * @param {Record[]} records 标准记录数组
  * @param {number} [tz=8] 记录未带 tz 时的默认时区
- * @returns {Array<object>} 新数组（不修改入参）
+ * @returns {NormalizedRecord[]} 新数组（不修改入参）
  */
 export function normalize(records, tz = 8) {
   // ⚠️ **非数组输入统一返回 `[]`**（不抛、不猜）。外部评审实测（2026-10-14）原来三种行为不一致：
@@ -96,7 +96,8 @@ export function normalize(records, tz = 8) {
   return out.sort((a, b) => a.bed - b.bed);
 }
 
-/** 全部睡眠段（含小睡）—— **SRI 必须用它**：小睡也是「睡着」（§十一 第 2 条） */
+/** 全部睡眠段（含小睡）—— **SRI 必须用它**：小睡也是「睡着」（§十一 第 2 条）
+ * @param {Record[]} records @param {number} [tz=8] @returns {NormalizedRecord[]} */
 export const allSleep = (records, tz = 8) => normalize(records, tz).filter((r) => r.dur > 0);
 
 /**
@@ -133,10 +134,10 @@ export const mainSleep = (records, minMinutes = 180, tz = 8) =>
  *
  * 实测依据（2026-10-13）：两者混用会让「今晚建议上床」差 1 分钟（现役 08:01/00:16 vs 混用后 08:02/00:17）。
  *
- * @param {Array<object>} records
+ * @param {Record[]} records
  * @param {number} [minMinutes=180]
  * @param {number} [tz=8]
- * @returns {Array<object>} 每个醒来日至多一条，按 bed 升序
+ * @returns {NormalizedRecord[]} 每个醒来日至多一条，按 bed 升序
  */
 export function dailyMain(records, minMinutes = 180, tz = 8) {
   const byDay = new Map();

@@ -121,7 +121,42 @@ function decompose(records, { minDayMinutes = 180, tz = 8 } = {}) {
 /** 天对 → SRI。`pairCount` 是**天对数**（与返回值的 `pairs` 同口径）。 */
 const sriOf = (same, pairCount) => (pairCount ? -100 + (200 * same) / (pairCount * MIN_PER_DAY) : null);
 
-/** @param {Array<object>} records @param {{minDayMinutes?: number, tz?: number}} [opts] */
+/**
+ * `computeSRI()` / `sriLastN()` 的返回。
+ * @typedef {object} SRIResult
+ * @property {number|null} sri 0~100；`null` = **没有任何「相邻且有效」的天对** —— 这是关于**数据**的陈述，不是关于睡眠的
+ * @property {number} days 参与计算的有效天数
+ * @property {number} pairs 天对数（相邻两天都通过有效天门槛才算一对）
+ * @property {string|null} from 窗口内第一天（`YYYY-MM-DD`）
+ * @property {string|null} to 窗口内最后一天
+ * @property {string[]} skipped 被有效天门槛整个剔除的自然日
+ */
+
+/**
+ * `sriLeaveOneOut()` 里的一天。
+ * @typedef {object} LOOEntry
+ * @property {string} date 被去掉的那天（`YYYY-MM-DD`）
+ * @property {number|null} sri 去掉它之后的全量 SRI
+ * @property {number|null} delta 相对基准的变化（**正 = 去掉它反而升 ⇒ 它在拖后腿**）
+ * @property {number} pairs 去掉它之后剩下的天对数
+ * @property {boolean} isolated `true` = 这天**不参与任何天对**（去掉它当然没变化）——
+ *   ⚠️ 这**不代表「它很规律」**，恰恰相反（见 `sriLeaveOneOut()` 的注释）
+ */
+
+/**
+ * `sriLeaveOneOut()` 的返回。
+ * @typedef {object} LOOResult
+ * @property {number} base 基准 SRI
+ * @property {number} days 有效天数
+ * @property {number} pairs 天对数
+ * @property {Array<LOOEntry>} out 逐日影响度（按日期升序）
+ */
+
+/**
+ * @param {import('./records.js').Record[]} records
+ * @param {{minDayMinutes?: number, tz?: number}} [opts]
+ * @returns {SRIResult|null} 非数组输入返回 `null`（不猜）
+ */
 export function computeSRI(records, opts = {}) {
   if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（见 records.js 顶部那条统一规则）
   const { days, skipped, dayPairs } = decompose(records, opts);

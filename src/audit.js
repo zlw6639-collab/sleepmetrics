@@ -25,9 +25,37 @@ const MILLISECOND_THRESHOLD = 1e11;
 const KNOWN_STATES = new Set([2, 3, 4, 5]);
 
 /**
- * @param {Array<object>} records 标准记录数组（见 records.js 顶部）
+ * 体检出的一条问题。
+ * @typedef {object} AuditIssue
+ * @property {string} ruleId 规则标识（如 `records.overlap`、`stages.missing-time`）
+ * @property {'error'|'warn'|'info'} severity `error` ⇒ 先修数据再算指标
+ * @property {string} message 人话描述
+ * @property {number} [index] 相关记录下标
+ * @property {number} [stageIndex] 相关分段下标
+ * @property {string} [ds] 相关自然日（`YYYY-MM-DD`）
+ */
+
+/**
+ * 体检汇总（**不是"数据质量评分"** —— 那会诱导人盯一个分数，而不是去看哪条坏了）。
+ * @typedef {object} AuditSummary
+ * @property {number} records 可用的记录条数
+ * @property {number} days 覆盖的自然日数
+ * @property {number} daysWithoutMainSleep 缺主睡眠的天数
+ * @property {{error: number, warn: number, info: number}} bySeverity
+ * @property {boolean} ok `false` = 有 `error` 级问题
+ */
+
+/**
+ * `auditRecords()` 的返回。
+ * @typedef {object} AuditResult
+ * @property {Array<AuditIssue>} issues 问题清单（按发现顺序）
+ * @property {AuditSummary} summary
+ */
+
+/**
+ * @param {import('./records.js').Record[]} records 标准记录数组（见 records.js 顶部）
  * @param {{tz?: number, minMainMinutes?: number}} [opts]
- * @returns {{issues: Array<object>, summary: object}}
+ * @returns {AuditResult}
  */
 export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
   const issues = [];

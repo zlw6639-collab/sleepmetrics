@@ -15,6 +15,21 @@
  *   「我不知道这一年的调休」——**悄悄给错建议比报错更坏**。
  */
 
+/**
+ * `makeRestJudge()` 的返回 —— 「今天算不算自由日」的**唯一权威**。
+ * ⚠️ 库不认识日历、也不假设任何人朝九晚五：这张表由**调用方注入**。
+ * ⚠️ 缺年份**不报错**（退化成只按周末），但 `missingYears()` 让上层能明说"我不知道这一年的调休"——
+ *   **悄悄给错建议比报错更坏**。
+ * @typedef {object} RestJudge
+ * @property {(ds: string) => boolean} isRest 自由日？
+ * @property {(ds: string) => boolean} isHoliday 法定假日？
+ * @property {(ds: string) => boolean} isMakeupWorkday 调休上班日？
+ * @property {(ds: string) => boolean} isWeekend 周末（**不考虑调休**）？
+ * @property {(ds: string) => boolean} hasYear 表里有这一年的数据吗？
+ * @property {(dsList: string[]) => string[]} missingYears 这些日期里哪些年份**没录**
+ * @property {() => string[]} loadedYears 表里录了哪些年份
+ */
+
 /** 'YYYY-MM-DD' → 星期几（0=周日 … 6=周六）。用 UTC 正午取，避免宿主时区把日期挪一天 */
 export const dowOf = (ds) => new Date(ds + 'T12:00:00Z').getUTCDay();
 
@@ -27,7 +42,7 @@ export const isWeekend = (ds) => {
 /**
  * 用一张表造出判定函数族。
  * @param {object} [table] 年份 → { holidays, workdays }
- * @returns {{isRest: (ds:string)=>boolean, isHoliday: Function, isMakeupWorkday: Function, isWeekend: Function, hasYear: Function, missingYears: Function, loadedYears: Function}}
+ * @returns {RestJudge}
  */
 export function makeRestJudge(table = {}) {
   const byYear = new Map();

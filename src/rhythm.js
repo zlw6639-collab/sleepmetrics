@@ -34,10 +34,26 @@
 const isSeries = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => Number.isFinite(x));
 
 /**
+ * `computeIS()` 的返回。
+ * @typedef {object} ISResult
+ * @property {number} is 日间稳定性（0~1，**越大越稳**）
+ * @property {number} n 观测点数
+ * @property {number} perDay 每天的点数
+ * @property {number} days 天数
+ */
+
+/**
+ * `computeIV()` 的返回。
+ * @typedef {object} IVResult
+ * @property {number} iv 日内变异性（**越小越平稳**）
+ * @property {number} n 观测点数
+ */
+
+/**
  * 日间稳定性 IS。
  * @param {number[]} values 等间隔序列（**等间隔是你保证的**，函数无法验证）
  * @param {{perDay?: number}} [opts] `perDay` = 每天的点数（默认 1440 = 1 分钟粒度）
- * @returns {{is: number, n: number, perDay: number, days: number}|null}
+ * @returns {ISResult|null} 不足（非等间隔整数天 / 全零序列）时返回 `null`
  */
 export function computeIS(values, { perDay = 1440 } = {}) {
   if (!isSeries(values)) return null;
@@ -66,7 +82,7 @@ export function computeIS(values, { perDay = 1440 } = {}) {
  * 日内变异性 IV。
  * ⚠️ 它只看**相邻两点之差**，因此对采样间隔敏感：间隔不同，同一段记录的 IV 不可比。
  * @param {number[]} values 等间隔序列
- * @returns {{iv: number, n: number}|null}
+ * @returns {IVResult|null}
  */
 export function computeIV(values) {
   if (!isSeries(values) || values.length < 3) return null;
