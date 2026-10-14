@@ -66,7 +66,18 @@ const rows = [
   ['alarm_f', 'FALSE', 'logical', 'mctq only; this library always assumes free days are unforced'],
 ];
 
-const csv = rows.map((r) => r.join(',')).join('\n');
+/**
+ * 最小但**正确**的 CSV 转义。
+ * ⚠️ 2026-10-14 踩过：note 列里带逗号（`circular mean sleep onset, work days`）而没加引号
+ *    ⇒ R 的 `read.csv()` 把一行读成 5 列，`d$value` 之后全错位，症状是"某个 metric 不见了"。
+ *    手搓 CSV 就必须自己转义 —— 别指望下游容错。
+ */
+const esc = (v) => {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+const csv = rows.map((r) => r.map(esc).join(',')).join('\n');
 console.log(csv);
 if (csvPath) { fs.writeFileSync(csvPath, csv + '\n', 'utf8'); console.error(`\n已写入 ${csvPath}`); }
 

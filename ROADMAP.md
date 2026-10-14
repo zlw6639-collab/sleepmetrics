@@ -5,32 +5,7 @@ and the last section lists what will **not** happen.
 
 ## Next
 
-- [ ] **Cross-check the numbers against an R implementation.**
-      `mctq` (MSFsc / SJL) is the reference implementation for the phase formulas. Today we verify against
-      *hand-computed* cases plus one frozen real-data anchor; an independent cross-check would be stronger
-      evidence. (R is not installed on this machine — being installed manually, as of 2026-10-14.)
-      **Scope: phase only, not SRI.** `sleepreg` needs Rtools to compile, and its counts/diary conventions
-      can never be bit-identical to this library's binary δ + local gates (180-minute valid day, single
-      window anchor) — so when they disagree there is **no way to tell who is wrong**. MSFsc/SJL admits a
-      clean comparison because `mctq::msf_sc()` consumes *aggregates*, not records.
-      ✅ **Prerequisite done (2026-10-14): the exchange format exists** — `examples/export-for-r.mjs` emits
-      the aggregate inputs and nothing else. Do **not** hand raw timestamps to R: `as.Date(POSIXct)` slices
-      days by `tzone` (system default — often UTC) while this library slices by a **fixed offset**; the two
-      defaults differ **silently**, and the only symptom is a one-day shift in *which night a record
-      belongs to* — which then moves MSFsc/SJL. Hand over **numbers**, so the timezone question is settled
-      once, locally, before either side sees the data.
-      ⚠️ **This checks the formula, not the pipeline** — identical aggregates isolate the published
-      equation, which is the only thing a second implementation can actually adjudicate. State that when
-      reporting the result.
-      ⚠️ **Known convention gap, not a bug:** mctq returns `NA` for MSFsc when free days are alarm-driven
-      (`alarm_f = TRUE`). A wearable cannot tell, so this library **always** computes the free-day form —
-      reconcile that before calling any difference a discrepancy.
-      ⚠️ **Decide the verdict rule first:** unequal numbers ⇒ **investigate the convention, never nudge the
-      regression anchors** (74.108 / 65.972 / 86.03). The artefact is **one-off evidence**: real data does
-      not leave the machine and does not enter CI or the published package.
-      ⚠️ **Related limitation, same root:** `tz` here is a **fixed offset, not an IANA zone** — the
-      library does not know about DST. A DST region is off by an hour on transition days. China has no
-      DST, so **this machine can never catch that bug** ⇒ it has to be *documented*, not tested away.
+
 - [ ] **Hand-written type declarations (`sleepmetrics.d.ts`).**
       JSDoc already gives editor IntelliSense, and TypeScript consumers can enable `allowJs` to get
       types from it. A hand-written `.d.ts` is the next step for first-class TS support.
@@ -79,6 +54,41 @@ and the last section lists what will **not** happen.
 
 ## Done
 
+- [x] **Cross-check the numbers against an R implementation.**
+      `mctq` (MSFsc / SJL) is the reference implementation for the phase formulas. Today we verify against
+      *hand-computed* cases plus one frozen real-data anchor; an independent cross-check would be stronger
+      evidence. (R is not installed on this machine — being installed manually, as of 2026-10-14.)
+      **Scope: phase only, not SRI.** `sleepreg` needs Rtools to compile, and its counts/diary conventions
+      can never be bit-identical to this library's binary δ + local gates (180-minute valid day, single
+      window anchor) — so when they disagree there is **no way to tell who is wrong**. MSFsc/SJL admits a
+      clean comparison because `mctq::msf_sc()` consumes *aggregates*, not records.
+      ✅ **Prerequisite done (2026-10-14): the exchange format exists** — `examples/export-for-r.mjs` emits
+      the aggregate inputs and nothing else. Do **not** hand raw timestamps to R: `as.Date(POSIXct)` slices
+      days by `tzone` (system default — often UTC) while this library slices by a **fixed offset**; the two
+      defaults differ **silently**, and the only symptom is a one-day shift in *which night a record
+      belongs to* — which then moves MSFsc/SJL. Hand over **numbers**, so the timezone question is settled
+      once, locally, before either side sees the data.
+      ⚠️ **This checks the formula, not the pipeline** — identical aggregates isolate the published
+      equation, which is the only thing a second implementation can actually adjudicate. State that when
+      reporting the result.
+      ⚠️ **Known convention gap, not a bug:** mctq returns `NA` for MSFsc when free days are alarm-driven
+      (`alarm_f = TRUE`). A wearable cannot tell, so this library **always** computes the free-day form —
+      reconcile that before calling any difference a discrepancy.
+      ⚠️ **Decide the verdict rule first:** unequal numbers ⇒ **investigate the convention, never nudge the
+      regression anchors** (74.108 / 65.972 / 86.03). The artefact is **one-off evidence**: real data does
+      not leave the machine and does not enter CI or the published package.
+      ⚠️ **Related limitation, same root:** `tz` here is a **fixed offset, not an IANA zone** — the
+      library does not know about DST. A DST region is off by an hour on transition days. China has no
+      DST, so **this machine can never catch that bug** ⇒ it has to be *documented*, not tested away.
+      ✅ **Result (2026-10-14 · mctq 0.3.2 / R 4.6.1):** on 222 days of real data the two
+      implementations agree **exactly** — MSFsc Δ = 0.000000 h, SJL Δ = 0.000000 h (tolerance 1 s) —
+      and mctq::sjl()'s default method = "shorter" matches this library's circular convention.
+      ⚠️ **The cross-check also surfaced a branch this library does not have:** when sd_f <= sd_w
+      (free days *not* longer than work days) mctq **skips the correction** and returns MSF, while this
+      library always computes SO_f + SD_week/2. The two disagree on such data; ours happened to fall
+      in the sd_f > sd_w branch. **Deliberately not changed** — the anchors pin the numbers, and
+      without alarm information "always free-day form" is the self-consistent choice.
+      Tools: xamples/export-for-r.mjs + xamples/crosscheck-mctq.R.
 - [x] **`suggest()` — the rule engine.** Every suggestion carries a `ruleId` plus the numbers that
       triggered it; **no invented metrics** (no "sleep debt", no 90-minute cycles).
 - [x] **`nudgeDecision()`** — the "should tonight's reminder fire" gate, as a pure predicate.
