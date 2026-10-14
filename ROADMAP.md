@@ -12,6 +12,16 @@ and the last section lists what will **not** happen.
       ⚠️ **It will be hand-written. This project will not grow a TypeScript build chain** — the
       published artifact staying identical to the source you read is a design decision, not an
       accident.
+      ✅ **Prerequisite done (2026-10-14): the typedefs now exist.** An external review found **zero**
+      `@typedef`s — JSDoc said only `Array<object>`, so the *standard record shape* lived in prose alone
+      and there was nothing concrete for a `.d.ts` to mirror. Now declared next to the code they
+      describe: `Record` / `Stage` / `NormalizedRecord` (records.js) · `SRIResult` / `LOOEntry` /
+      `LOOResult` (sri.js) · `PhaseResult` (phase.js) · `ISResult` / `IVResult` (rhythm.js) ·
+      `AuditIssue` / `AuditSummary` / `AuditResult` (audit.js) · `CircStats` (time.js) ·
+      `RestJudge` (rest.js).
+      ⚠️ **Still deliberately untyped: `suggest()`'s return shape** — its fields have to be read off the
+      implementation and its tests, not guessed. A wrong typedef is worse than none. Do that in the
+      `.d.ts` pass, field by field.
 - [ ] **ASCII bedtime heatmap for the CLI.** One character per night — rows = weeks, columns = days —
       so drift is visible at a glance instead of inferred from a number.
       ⚠️ **Design trap**: bedtimes wrap past midnight, so map them **circularly** (relative to the
