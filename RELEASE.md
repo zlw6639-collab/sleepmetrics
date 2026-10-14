@@ -88,26 +88,52 @@ Then fill in the placeholders in `package.json` **before publishing to npm**:
 
 ## 4. Publish to npm
 
+**First, get a credential that actually works.** `npm login` uses web auth on npm 11, and on this
+machine it silently failed to write `~/.npmrc` — the file kept yesterday's dead token, so *every*
+command answered `E401` while looking like a login problem. What worked was a **Granular Access
+Token**: npmjs.com → avatar → *Access Tokens* → Generate → permission **Read and write**
+(⚠️ the page **defaults to "No access"**, which would fail too), packages: this one.
+Then write it yourself — **never paste a token into a chat, an issue or a commit**:
+
 ```powershell
-npm login                  # once per machine
-npm whoami                 # confirm you are logged in as the right account
-npm publish --dry-run      # last look at the tarball contents
-npm publish                # 0.1.0 → public
+npm config set //registry.npmjs.org/:_authToken <token>
+npm whoami                 # must print your username BEFORE going further
 ```
 
-`npm publish` needs network access (a proxy/VPN may be required outside this machine). If the name got
-taken between now and then, `npm publish` fails with `E403` — rename locally and retry rather than
-publishing under a variant silently.
+```powershell
+npm publish --dry-run      # last look at the tarball contents
+npm publish
+```
 
-**Afterwards**: `npm view sleepmetrics` should show your version, and a fresh install in an empty
-directory should work:
+⚠️ **On a restricted PowerShell, `npm` may be blocked outright** —
+`npm.ps1 cannot be loaded because running scripts is disabled on this system … PSSecurityException`.
+Call `npm.cmd` instead.
+
+`npm publish` needs network access. If the name got taken, it fails with `E403` — rename locally and
+retry rather than publishing under a variant silently.
+
+**Afterwards: wait for propagation, then check it the honest way.** Publishing is asynchronous, so
+`npm view <pkg>@<version>` can 404 for a minute or two *after* a successful publish. Do **not** test
+propagation with a regex over combined output — npm's own error text contains the version number you
+are grepping for, so `-match '1\.2\.3'` happily matches *"No match found for version 1.2.3"* and
+reports success when nothing is there:
+
+```powershell
+npm view sleepmetrics dist-tags --json 2>$null    # {"latest":"0.1.1"} is the only honest signal
+```
+
+Then verify a **real install** in an empty directory — the tarball, not the working tree:
 
 ```powershell
 mkdir $env:TEMP\sm-check; cd $env:TEMP\sm-check
 '{ "name": "sm-check", "type": "module", "private": true }' | Set-Content package.json
 npm i sleepmetrics
-node -e "import('sleepmetrics').then(m => console.log(Object.keys(m).length, 'exports'))"
+node -e "console.log(require('./node_modules/sleepmetrics/package.json').version)"
 ```
+
+Finally confirm **the tarball is the artifact you tested**: `npm view <pkg>@<ver> dist.shasum` must
+equal the SHA1 of your local `npm pack` output, and `gitHead` must be the commit you pushed.
+(For 0.1.1: shasum `a2c0f6dd…`, gitHead `ec4a11a9…` — both matched.)
 
 ## 5. Later releases
 
