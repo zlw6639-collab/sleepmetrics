@@ -15,6 +15,42 @@
  *
  * ⚠️ 移植语义（项目方案 §十一 第 5 条）：睡眠一律归到**醒来日**（`ds = dayOf(wake)`）。
  */
+
+/**
+ * 一段睡眠分期（`stages` 数组的元素）。
+ * @typedef {object} Stage
+ * @property {number} start 该段开始的 epoch **秒**（UTC）
+ * @property {number} end   该段结束的 epoch **秒**（UTC）
+ * @property {number} state `2`=深睡 · `3`=浅睡 · `4`=REM · `5`=清醒（与主流 actigraphy 编码一致）
+ */
+
+/**
+ * ★ **标准记录形状** —— 本库的**唯一输入契约**（`NON-GOALS.md` §5：库不认任何厂商格式）。
+ *
+ * ⚠️ 全部是**数字与数组**：没有字符串日期、没有 IANA 时区名。把小米 / Apple / Gadgetbridge 的
+ * 导出变成这个东西，是**适配器**的活（`examples/mifit-to-lib.mjs` 是一个示例）。
+ *
+ * @typedef {object} Record
+ * @property {number} bed 入睡时刻，epoch **秒**（UTC）
+ * @property {number} wake 醒来时刻，epoch **秒**（UTC）
+ * @property {number} [tz] **固定偏移小时数**（不是 IANA 时区；缺省用调用方给的默认值）。
+ *   ⚠️ 库不知道夏令时 —— 有 DST 的地区请**逐条**给出当时生效的偏移（README §Semantics 第 7 条）。
+ * @property {number} [dur] 时长（分钟）；缺省由 `(wake - bed) / 60` 四舍五入推出
+ * @property {Stage[]} [stages] 睡眠分期；**有则 SRI 更准**（能区分「清醒」与「睡着」）
+ */
+
+/**
+ * `normalize()` 的输出：`Record` 加上**已算好的 `ds`** 与补全后的 `dur`。
+ * 库内部各模块都吃这个形状（而不是再各自算一遍日归属）。
+ *
+ * @typedef {object} NormalizedRecord
+ * @property {string} ds 醒来日 `YYYY-MM-DD`（= `dayOf(wake, tz)`）—— 全项目的「日归属」口径
+ * @property {number} bed
+ * @property {number} wake
+ * @property {number} dur
+ * @property {number} tz
+ * @property {Stage[]|null} stages **无效元素已被过滤掉**；没有有效分段时为 `null`
+ */
 import { dayOf } from './time.js';
 
 /**

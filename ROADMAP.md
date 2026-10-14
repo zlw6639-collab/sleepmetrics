@@ -88,7 +88,7 @@ and the last section lists what will **not** happen.
       library always computes SO_f + SD_week/2. The two disagree on such data; ours happened to fall
       in the sd_f > sd_w branch. **Deliberately not changed** — the anchors pin the numbers, and
       without alarm information "always free-day form" is the self-consistent choice.
-      Tools: xamples/export-for-r.mjs + xamples/crosscheck-mctq.R.
+      Tools: `examples/export-for-r.mjs` + `examples/crosscheck-mctq.R`.
 - [x] **`suggest()` — the rule engine.** Every suggestion carries a `ruleId` plus the numbers that
       triggered it; **no invented metrics** (no "sleep debt", no 90-minute cycles).
 - [x] **`nudgeDecision()`** — the "should tonight's reminder fire" gate, as a pure predicate.
