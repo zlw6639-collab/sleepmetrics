@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 > never a patch** (`RELEASE.md` §2). The regression anchors are **74.108 / 65.972 / 86.03** and they
 > have not moved since 0.1.0.
 
+## [Unreleased]
+
+### Added
+
+- **`TIMESTAMPS.md`** — the step *before* the library, where things go wrong **silently**. Measured on a
+  UTC+8 machine: **only a bare `YYYY-MM-DD` parses as UTC**, while every other offset-less form parses as
+  *local* — so `'2026-03-01'` and `'2026-03-01T00:00'` end up **8 hours apart**, which moves a night
+  across midnight and changes SRI without raising anything. The page also covers the
+  seconds/milliseconds/microseconds trap (none of them throws), Excel serial numbers, split date+time
+  fields, the absence of a DST table, and a **verified** `toEpoch` snippet built on
+  `Date.UTC(...) − offset` so the host timezone is never consulted.
+  ⚠️ **Not in the published 0.1.1 tarball** — it landed after that release (npm has 23 files, the repo
+  now has 24). It ships with the next version; this entry exists so that cannot be forgotten.
+
 ## [0.1.1] — 2026-10-14
 
 ### Added
