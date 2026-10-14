@@ -89,9 +89,12 @@ owning a questionnaire or drawing a conclusion.
 
 > Worth knowing: `npm search mctq`, `morningness eveningness` and `epworth sleepiness` all return
 > **zero** results (re-checked 2026-10-14), and `chronotype questionnaire` returns form builders.
-> ⚠️ **One correction to the earlier claim:** `npm search actigraphy` **does** return this package —
-> since 0.1.0 (published 2026-10-13) that space is no longer empty, it is just **very thin**. The
-> boundary below still matters for the same reason; only the "vacuum" metaphor needed retiring.
+> ⚠️ **Read those searches as a snapshot, not as a verdict about the space.** `npm search actigraphy`
+> returned nothing before 0.1.0 and returns this package today — that is a **catalogue changing**, not a
+> **territory being claimed**. More implementations should follow, and this boundary is written to help
+> them land *beside* this one rather than collide with it: it is about **what belongs where**
+> (measurement here, questionnaires and clinical tools elsewhere), **not about who got here first**.
+> If you are building one of those neighbours, the pieces above are meant to slot together.
 
 ## 9. A "sleep score"
 

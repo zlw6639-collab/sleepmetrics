@@ -83,9 +83,11 @@ All notable changes to this project are documented here. The format follows
   diluted the anchor to 74.303, turning the gate red for no reason. The anchors themselves are
   unchanged — only the取数 window was tightened.
 - CLI `--json` output sites now include `schemaVersion` (see above).
-- `NON-GOALS.md` §8: **corrected** — `npm search actigraphy` now returns this package (since 0.1.0), so
-  the "the actigraphy space is a vacuum" claim no longer holds. The boundary argument stands; only the
-  metaphor was retired.
+- `NON-GOALS.md` §8: **reworded** — `npm search actigraphy` returns this package today (it returned
+  nothing before 0.1.0), so the "vacuum" framing was retired. The boundary argument is unchanged, and
+  the passage now says explicitly that this is a **catalogue changing, not a territory claimed**:
+  **more implementations should follow**, and the boundary is about *what belongs where* — not about who
+  got here first.
 
 ### Notes
 
