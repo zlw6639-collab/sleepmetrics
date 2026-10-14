@@ -160,6 +160,12 @@ definition: **a day without an alarm clock**. If your rule differs, read your ou
 
 ## CDN / no-install usage
 
+> **See it move:** the interactive demo at <https://zlw6639-collab.github.io/sleepmetrics/> shows the
+> one thing prose keeps failing to convey — **average bedtime and regularity are different axes**.
+> Drag the *spread* slider and the average stays pinned while SRI falls from 100 → 0 → negative
+> (±180 lands exactly on 0: "indistinguishable from random"). Synthetic data only; the page computes
+> with this library straight from a CDN.
+
 Because this is a plain ESM package with **zero dependencies**, it loads straight from a CDN — in a
 browser, Deno or Bun — with no build step anywhere:
 

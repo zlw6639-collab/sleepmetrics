@@ -1,0 +1,35 @@
+name: pages
+
+# 把 docs/ 部署成 GitHub Pages —— 也就是那个交互式教具页。
+# ⚠️ 首次需要在仓库 Settings → Pages → Source 选 **GitHub Actions**（一次性）。
+# ⚠️ 页面**只用合成数据**（它是公开的）：合成序列在浏览器里现场生成，不涉及任何个人数据。
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

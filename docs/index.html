@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SRI：平均入睡时刻与规律性是两个维度</title>
+<style>
+  :root{
+    --bg:#faf9f7; --fg:#1c1b19; --muted:#6b6862; --line:#dcd9d3;
+    --accent:#185FA5; --warn:#A32D2D; --ok:#0C447C;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",system-ui,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#1a1917; --fg:#eceae6; --muted:#a5a19a; --line:#3a3835;
+           --accent:#7fb2e5; --warn:#e59a9a; --ok:#a8c9ef; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 20px 64px;background:var(--bg);color:var(--fg);
+       font-family:var(--sans);line-height:1.65;-webkit-font-smoothing:antialiased}
+  main{max-width:720px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 28px}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:20px;margin:0 0 20px;background:transparent}
+  label{display:block;font-size:13px;color:var(--muted);margin:0 0 14px}
+  label:last-child{margin-bottom:0}
+  label output{color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:600}
+  input[type=range]{width:100%;margin:8px 0 0;accent-color:var(--accent)}
+  .readout{display:flex;gap:28px;flex-wrap:wrap;align-items:baseline;margin:0 0 22px}
+  .readout div{font-size:13px;color:var(--muted)}
+  .readout strong{display:block;font-size:30px;font-family:var(--mono);color:var(--fg);
+                 line-height:1.15;letter-spacing:-.02em}
+  .readout strong.neg{color:var(--warn)}
+  .readout strong.flat{color:var(--ok)}
+  svg{display:block;width:100%;height:auto}
+  .axis{font-size:11px;fill:var(--muted);font-family:var(--mono)}
+  .night{stroke:var(--line);stroke-width:1}
+  .dot{fill:var(--accent)}
+  .dot.out{fill:var(--warn)}
+  .meanline{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+  .verdict{font-size:14px;margin:18px 0 0;padding:12px 14px;border-left:3px solid var(--accent);
+           background:color-mix(in srgb,var(--accent) 7%,transparent);border-radius:0 6px 6px 0}
+  .verdict.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)}
+  details{margin:26px 0 0;font-size:14px;color:var(--muted)}
+  summary{cursor:pointer;color:var(--fg)}
+  details p{margin:10px 0 0}
+  code{font-family:var(--mono);font-size:.92em;background:color-mix(in srgb,var(--fg) 8%,transparent);
+       padding:1px 5px;border-radius:4px}
+  .foot{margin:34px 0 0;padding-top:16px;border-top:1px solid var(--line);
+        font-size:13px;color:var(--muted)}
+  .foot a{color:var(--accent)}
+  #loaderr{display:none;border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)}
+  table{border-collapse:collapse;font-size:13px;margin:12px 0 0;width:100%}
+  td,th{text-align:left;padding:5px 10px 5px 0;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:500}
+</style>
+</head>
+<body>
+<main>
+  <h1>平均入睡时刻相同，SRI 却天差地别</h1>
+  <p class="sub">两个滑块各动一个维度：<strong>中心</strong>（几点睡）和<strong>摆幅</strong>（每天差多少）。
+     —— SRI 只对后者有反应。</p>
+
+  <div class="panel">
+    <label>摆幅（每晚比中心早/晚多少）
+      <output id="ampOut">±0 分钟</output>
+      <input id="amp" type="range" min="0" max="240" step="10" value="0">
+    </label>
+    <label>中心入睡时刻
+      <output id="ctrOut">04:00</output>
+      <input id="ctr" type="range" min="-240" max="240" step="30" value="0">
+    </label>
+  </div>
+
+  <div class="readout">
+    <div>平均入睡<strong id="avg">04:00</strong></div>
+    <div>SRI<strong id="sri">—</strong></div>
+    <div>窗口<strong style="font-size:20px" id="win">20 晚</strong></div>
+  </div>
+
+  <svg id="plot" viewBox="0 0 680 168" role="img" aria-label="20 晚的入睡时刻分布">
+    <text class="axis" x="0" y="12">每晚入睡时刻（虚线 = 平均值）</text>
+    <g id="rows"></g>
+    <line id="meanline" class="meanline" x1="0" y1="24" x2="0" y2="156"></line>
+    <g id="scale"></g>
+  </svg>
+
+  <p class="verdict" id="verdict">拖动上面的滑块看看。</p>
+
+  <div class="panel" id="loaderr">
+    <strong>没能加载 sleepmetrics 库</strong>
+    <p style="margin:8px 0 0;font-size:14px">这一页用 CDN 上的真库实时计算（口径就是库的口径）。
+       离线时它算不了 —— 打开网络再刷新即可。</p>
+  </div>
+
+  <details>
+    <summary>为什么 SRI 会是负数？100 和 0 又分别是什么？</summary>
+    <p>SRI 的定义是<strong>「同一钟点、相隔 24 小时，状态一致的比例」</strong>（Phillips 2017）。</p>
+    <table>
+      <tr><th>SRI</th><th>含义</th></tr>
+      <tr><td><code>100</code></td><td>每天同一时刻都在同一个状态（睡或醒）—— 完全规律</td></tr>
+      <tr><td><code>0</code></td><td>与<strong>随机</strong>无法区分</td></tr>
+      <tr><td><code>−100</code></td><td><strong>比随机还糟</strong>：钟点相同、状态却总是反着来</td></tr>
+    </table>
+    <p>所以它不是 0~100 的"分数"。负数是这条定义的自然结果 —— 当睡眠窗口在 24 小时里摆动得足够大，
+       相邻两天的同一钟点会系统性地一个在睡、一个在醒。</p>
+    <p><strong>它和睡多久无关</strong>（文献 r = 0.05）。上滑摆幅时你会看到：平均入睡一动没动，
+       时长也一直是 8 小时，只有 SRI 在掉。</p>
+    <p><strong>试试把「摆幅」拖到 ±180</strong> —— 那正好是 <code>SRI ≈ 0</code> 的点：与随机无法区分。
+       再拖到 ±240，它就掉进负数了。</p>
+  </details>
+
+  <p class="foot">
+    用 <a href="https://www.npmjs.com/package/sleepmetrics">sleepmetrics</a> 的
+    <code>computeSRI()</code> 实时计算 · 20 晚、每晚 8 小时、两个入睡时刻交替 ·
+    <strong>全部是合成数据</strong>（这一页是公开的）· 口径见
+    <a href="https://github.com/zlw6639-collab/sleepmetrics">仓库</a> 的 <code>src/sri.js</code>
+  </p>
+</main>
+
+<script type="module">
+const el = (id) => document.getElementById(id);
+const N = 20, DUR = 480;                       // 20 晚，每晚 8 小时
+const BASE = Date.UTC(2026, 2, 1) / 1000;      // 2026-03-01 00:00Z
+const CENTER0 = 4 * 60;                        // 中心基准 = 04:00（±240 分钟都不会跨日）
+
+const hm = (min) => {
+  const v = ((Math.round(min) % 1440) + 1440) % 1440;
+  return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+};
+
+/** 两个入睡时刻交替 ⇒ 平均（圆周）恒为中心 */
+function buildNights(ampMin, ctrMin) {
+  const recs = [];
+  for (let i = 0; i < N; i += 1) {
+    const off = CENTER0 + ctrMin + (i % 2 ? ampMin : -ampMin);
+    const bed = BASE + i * 86400 + off * 60;
+    recs.push({ bed, wake: bed + DUR * 60, tz: 0 });
+  }
+  return recs;
+}
+
+let lib = null;
+try {
+  lib = await import('https://esm.sh/sleepmetrics@0.1');
+} catch (e) {
+  el('loaderr').style.display = 'block';
+}
+
+function render() {
+  const amp = Number(el('amp').value);
+  const ctr = Number(el('ctr').value);
+  el('ampOut').textContent = `±${amp} 分钟`;
+  el('ctrOut').textContent = hm(CENTER0 + ctr);
+  el('avg').textContent = hm(CENTER0 + ctr);
+
+  // 迷你图：每晚一个点
+  const X = 40, W = 600, x0 = CENTER0 - 300, x1 = CENTER0 + 300;   // 分钟轴
+  const sx = (m) => X + ((m - x0) / (x1 - x0)) * W;
+  const rows = el('rows');
+  rows.textContent = '';
+  for (let i = 0; i < N; i += 1) {
+    const off = CENTER0 + ctr + (i % 2 ? amp : -amp);
+    const y = 26 + i * 6.6;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', sx(off)); c.setAttribute('cy', y); c.setAttribute('r', 2.6);
+    c.setAttribute('class', amp > 120 ? 'dot out' : 'dot');
+    rows.appendChild(c);
+  }
+  el('meanline').setAttribute('x1', sx(CENTER0 + ctr));
+  el('meanline').setAttribute('x2', sx(CENTER0 + ctr));
+
+  const scale = el('scale');
+  scale.textContent = '';
+  for (const m of [x0, CENTER0, x1]) {
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', sx(m)); t.setAttribute('y', 166);
+    t.setAttribute('text-anchor', m === x0 ? 'start' : (m === x1 ? 'end' : 'middle'));
+    t.setAttribute('class', 'axis'); t.textContent = hm(m);
+    scale.appendChild(t);
+  }
+
+  if (!lib) { el('sri').textContent = '—'; return; }
+
+  const r = lib.computeSRI(lib.allSleep(buildNights(amp, ctr)));
+  const v = r.sri;
+  el('sri').textContent = v === null ? '—' : v.toFixed(1);
+  el('sri').className = v === null ? '' : (v < 0 ? 'neg' : (amp === 0 ? 'flat' : ''));
+
+  const verdict = el('verdict');
+  verdict.className = 'verdict' + (v !== null && v < 0 ? ' warn' : '');
+  if (amp === 0) {
+    verdict.textContent = `摆幅 0：每晚都 ${hm(CENTER0 + ctr)} 入睡 —— 平均入睡和 SRI 都到顶（100）。`;
+  } else if (v !== null && v < 0) {
+    verdict.textContent = `摆幅 ±${amp} 分钟：平均入睡仍是 ${hm(CENTER0 + ctr)}、每晚仍睡 8 小时，`
+      + `但 SRI 已跌到 ${v.toFixed(1)} —— 比随机还糟。摆幅够大时，相邻两天的同一钟点会系统性地一个在睡、一个在醒。`;
+  } else {
+    verdict.textContent = `摆幅 ±${amp} 分钟：平均入睡仍是 ${hm(CENTER0 + ctr)}（没动），`
+      + `SRI 却从 100 掉到 ${v.toFixed(1)}。这就是两个维度。`;
+  }
+}
+
+el('amp').addEventListener('input', render);
+el('ctr').addEventListener('input', render);
+render();
+</script>
+</body>
+</html>
