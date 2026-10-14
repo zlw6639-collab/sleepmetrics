@@ -73,6 +73,9 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
   const norm = [];
   const seen = new Map();
   const tzSet = new Set();
+  /** `stages.no-awake` 用的计数器（见该规则处的注释） */
+  let stageRecords = 0;
+  let awakeStages = 0;
 
   records.forEach((r, index) => {
     if (r === null || typeof r !== 'object') {
@@ -139,6 +142,7 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
     if (r.stages !== undefined && !Array.isArray(r.stages)) {
       push('stages.not-array', 'warn', 'stages 不是数组（会被当成"没有分段"处理）', { index });
     } else if (Array.isArray(r.stages)) {
+      stageRecords += 1;
       let prevEnd = -Infinity;
       r.stages.forEach((st, stage) => {
         const s = Number(st?.start);
@@ -151,6 +155,7 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
         if (!KNOWN_STATES.has(Number(st?.state))) {
           push('stages.unknown-state', 'warn', `state=${st?.state} 不在 2/3/4/5 内（本库只认这套编码）`, { index, stage });
         }
+        if (Number(st?.state) === 5) awakeStages += 1;
         if (s < prevEnd) push('stages.overlap', 'warn', 'stage 与前一段重叠，或 stages 未按时间排序', { index, stage });
         prevEnd = Math.max(prevEnd, e);
       });
@@ -160,6 +165,27 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
       index, bed, wake, dur, tz: tzUse, ds: dayOf(wake, tzUse),
     });
   });
+
+  /**
+   * ★ `stages.no-awake` —— 这条拦的**不是**「数值非法」，而是「**数值合法、语义可能错位**」。
+   *
+   * 背景（外部评审 2026-10-14 量化）：`state` 是**厂商私有**的 1–5 编码。别人家用同一区间表示
+   * 别的东西时，每一个值都落在合法范围内 ⇒ `stages.unknown-state` **永远抓不到**。
+   * SRI 只看「睡着 / 清醒」，所以深睡浅睡换位不要紧；**清醒码错位直接虚高**（实测约 4 分）。
+   *
+   * 判据**刻意保守**——因为这是一个只能"提示"、不能"断言"的信号：
+   *   · 样本要够（≥10 条带分段的记录）：2 晚说明不了任何事；
+   *   · 条件：**一个 `state === 5` 都没有**。
+   * ⚠️ 触发不代表数据错了：「整夜没醒」是真实存在的。所以措辞必须**同时给出两种解释**，
+   *    让人自己去核编码，而不是给一个"你的数据有问题"的判决。
+   */
+  const NO_AWAKE_MIN_RECORDS = 10;
+  if (stageRecords >= NO_AWAKE_MIN_RECORDS && awakeStages === 0) {
+    push('stages.no-awake', 'warn',
+      `${stageRecords} 条带分段的记录里一个 state=5（清醒）都没有。两种解释都成立：`
+      + '① 你确实整夜没醒；② 你的数据源用的不是本库这套编码（本库 awake = 5，源自小米私有编码）。'
+      + '若是后者，SRI 会偏高（实测约 4 分）—— 建议先核对编码再读数字。');
+  }
 
   if (tzSet.size > 1) {
     push('tz.mixed', 'warn', `记录里出现 ${tzSet.size} 种 tz（${[...tzSet].join(', ')}）—— 若这是有意的（跨时区旅行）可以忽略`);

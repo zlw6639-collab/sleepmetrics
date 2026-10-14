@@ -160,6 +160,42 @@ and the last section lists what will **not** happen.
 
 - Gadgetbridge export adapter
 - Apple Health export adapter
+- **String-typed stage states** (`'deep' | 'light' | 'rem' | 'awake'`, numeric codes kept for
+  compatibility). Motivated by what `test/audit.test.js` now pins: numeric codes **inside** the valid
+  range can be **semantically wrong**, and nothing can detect it — `state: 4` is a legal number whether
+  it means REM here or "awake" somewhere else. `stages.no-awake` catches most awake-code mismatches
+  indirectly (they surface as "there is no 5 anywhere"), but a string union would make the whole class
+  impossible. ⚠️ Accept **both** forms for at least one minor version, and never guess what a bare
+  number meant.
+- **Hour-of-day attribution of SRI loss.** SRI accumulates per epoch, so it can be decomposed:
+  *"76% of your irregularity loss comes from 01:00–03:00."* Pure arithmetic, no theory risk, and it
+  pairs with `--influence` (which **night**) to give *which night + which hours*. ⚠️ Same discipline as
+  `sriLeaveOneOut`: report the decomposition, never a threshold.
+- **Regularity × duration quadrant plot.** One point per week (x = mean duration, y = SRI) makes
+  *"slept enough but irregularly"* vs *"regular but too short"* visible at a glance; ASCII suffices.
+  Same family as the bedtime heatmap, different question.
+- **Interactive teaching page** — the existing "single-page demo" item, but with a concrete shape: a
+  **draggable demo** (two sliders = two bedtimes, SRI recomputed live) teaches *"average bedtime and
+  regularity are different axes"* faster than any prose, because the reader can watch the average stay
+  put while SRI falls. A hand-drawn prototype already exists (5 groups, same 00:00 mean, SRI 100 → −28.3;
+  **four of its five values reproduce exactly, one is off by 0.32** — use computed values in the shipped
+  page). Zero-dependency ESM is what makes this cheap: one `import` from a CDN, no build.
+  ⚠️ **Synthetic data only** — the page is public.
+- **Three-way cross-implementation check** (JS ↔ R ↔ Python). Phase is already verified against R's
+  `mctq`; add Python's `pyActigraphy`, and R's `sleepreg` if Rtools ever appears. ⚠️ Same caveat that
+  closed the SRI half of the R check: **a disagreement you cannot adjudicate is not evidence** — only
+  compare quantities whose conventions are stated on *both* sides.
+- **Zenodo DOI.** `CITATION.cff` already exists; wiring Zenodo gives every release a DOI at zero code
+  cost on the GitHub side. For a library whose pitch is "these are research metrics", it is the
+  cheapest formality available.
+- **A "if I stop maintaining this" note.** The README already promises no maintenance. Saying **what to
+  migrate to** and **how to get your data out** is more honest than silence — and that kind of honesty
+  is exactly what makes a dependency safe to adopt.
+- ❌ **Not planned, stated here so nobody re-litigates it:**
+  an **activity-counts mode** — the README already warns that binary and counts conventions are not
+  comparable, so shipping both would *manufacture* incomparable numbers; and a **population percentile
+  for SRI** — `REFERENCES.md` opens with "no thresholds here, not one", and a percentile would break
+  precisely that promise.
 
 ## Explicitly not planned
 

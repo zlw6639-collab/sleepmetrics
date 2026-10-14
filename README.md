@@ -86,6 +86,20 @@ Adapters for vendor formats (Xiaomi / Gadgetbridge / Apple Health / CSV) are del
 part of this package: mapping someone else's field names is a different job, and each source
 changes on its own schedule.
 
+> ⚠️ **Those `state` codes are a vendor's private encoding, not a standard.** `2` = deep · `3` = light ·
+> `4` = REM · `5` = awake is **Xiaomi's** numbering, not AASM/PSG. Anything else you own that uses 1–5
+> (Gadgetbridge exports, some Apple Health exports, a hand-made CSV) will land **inside the valid range
+> with a different meaning**, and **no type system can catch that** — `state: 2` is always a legal
+> number.
+>
+> **Map it before you feed it in, and check the awake code first.** SRI only looks at asleep-vs-awake, so
+> a deep/light swap does not move it — **the awake code does**. Measured on 10 nights of which 5 had
+> night-waking: feeding the AASM numbering (awake = `0`) as if it were this one inflated SRI from
+> **93.77 to 97.93 — 4.16 points** — in precisely the situation real wearable data hits most often.
+> `auditRecords()` catches out-of-range codes (`stages.unknown-state`) and flags data where **no**
+> segment is awake (`stages.no-awake`), but it **cannot** see a silent remapping that stays in range.
+> If you are unsure, run `audit` first and read those two rules.
+
 ## API
 
 | Function | Returns |
