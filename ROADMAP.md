@@ -9,6 +9,15 @@ and the last section lists what will **not** happen.
       `mctq` (MSFsc / SJL) and `sleepreg` (SRI) are the reference implementations for these formulas.
       Today we verify against *hand-computed* cases plus one frozen real-data anchor; an independent R
       cross-check would be stronger evidence. (No R on this machine yet.)
+      ⚠️ **Prerequisite — settle the exchange format first (2026-10-14).** Do **not** hand raw
+      timestamps to R. `as.Date(POSIXct)` slices days by `tzone` (system default — often UTC), while this
+      library slices by a **fixed offset**. The two defaults differ **silently**, and the only symptom is
+      a one-day shift in *which night a record belongs to* — which then moves MSFsc/SJL. Exchange
+      **minutes-since-local-midnight + durations** instead, so the timezone question is settled once,
+      locally, before either side sees the data.
+      ⚠️ **Related limitation, same root:** `tz` here is a **fixed offset, not an IANA zone** — the
+      library does not know about DST. A DST region is off by an hour on transition days. China has no
+      DST, so **this machine can never catch that bug** ⇒ it has to be *documented*, not tested away.
 - [ ] **Hand-written type declarations (`sleepmetrics.d.ts`).**
       JSDoc already gives editor IntelliSense, and TypeScript consumers can enable `allowJs` to get
       types from it. A hand-written `.d.ts` is the next step for first-class TS support.
@@ -42,6 +51,18 @@ and the last section lists what will **not** happen.
       ⚠️ **Never demo with real sleep data** — synthetic fixtures only. The page is public, and the
       `.gitignore` treating `raw/` as radioactive applies to anything derived from it too.
 - [ ] **Adapters** — generic JSON → CSV first; vendor formats only when somebody actually asks.
+- [ ] **A "write your own adapter with a local AI" prompt template** (2026-10-14).
+      Vendor exports are frequently **gigabytes** — far too large to paste into a web chat — while a
+      local IDE agent (Cursor / Claude Code) can read them **in a streaming pass** and emit the standard
+      record array. That turns "please support my watch" into a task the user finishes in one evening.
+      ⚠️ **Documentation only — never a bundled adapter.** No brand may enter the repository
+      (`NON-GOALS.md` §5), so the template must be **format-agnostic**: standard record shape in, the
+      user's own sample file as the only brand-specific input.
+      ⚠️ **The real risk is silent data loss.** An AI-written parser that quietly drops rows yields
+      numbers that look perfectly fine — precisely what `auditRecords()` exists to catch. So the template
+      must *require* three self-checks: **row-count conservation** (in = out + explicitly counted skips),
+      one run of `auditRecords()`, and one run of `computeSRI()` that does **not** return `null`.
+
 
 ## Done
 
@@ -67,12 +88,45 @@ and the last section lists what will **not** happen.
       `isolated: true` marks a day that participates in **no pair at all**: dropping it cannot change
       anything, and that must **not** be read as "this night was regular". CLI: `--influence`.
 - [x] **Disclaimer** — `DISCLAIMER.md` (6 sections) + `DISCLAIMER` on every advisory return value.
+- [x] **Asides are forbidden on physiological metrics** (2026-10-14) — heart rate / HRV / SpO₂ /
+      respiration / temperature / stress. A playful remark there reads as a **medical hint**, and that is
+      the most anxiety-prone data of all; it is the flip side of "no medical advice" (`NON-GOALS.md` §2).
+      Enforced twice over: a `PHYSIO_KEYS` guard at the top of `aside()` (silent return, not a softer
+      line), plus `test/aside-guard.test.js`, which pins both *"no call site may pass a physiological
+      key"* and *"the guard itself still exists"* — and it is **negative-tested**: injecting an `hr` key
+      turns it red.
+- [x] **`REFERENCES.md` — curated authoritative sources** (2026-10-14). Recommended durations,
+      population distributions and cohort SRI values, **each row carrying its measurement method**.
+      The file leads with the traps rather than the numbers, because the traps are the finding:
+      **AASM/SRS 2015 says "7 or more hours"** and the ubiquitous *"AASM recommends 7–9"* is a misquote
+      of NSF; self-report and actigraphy differ by **~1.1 h in the same subjects** (r = 0.43); and the
+      *same* NHANES actigraphy data yields a mean of 6.36 h or a median of 7.83–8.26 h depending on the
+      scoring pipeline. WHO has **no adult sleep-duration recommendation at all** (guidance stops at
+      age 5). **Docs only — never wired into output**: rendering it as "your value vs the population" is
+      the comparison `NON-GOALS.md` §9 refuses, and the alternative is stated there (the user's **own**
+      history: *"your last 30 nights sit at the 62nd percentile of your own 222"*).
+- [x] **`SLEEP-FACTS.md` — animal sleep, as true fun** (2026-10-14). Six species, **each with its
+      measurement method stated** (wild EEG · implanted actiwatch · video observation · geolocator), plus
+      a "how these numbers go wrong" section covering captivity inflation, behaviour-vs-EEG confusion,
+      and inference hardening into fact. Deliberately **unconnected to any metric** — cross-species
+      comparison is three-way incomparable. It keeps the swift **as a warning**: the popular
+      "sleeps in flight" claim comes from a study that never measured sleep.
+- [x] **`PUSHING-TO-YOUR-PHONE.md` + `examples/push-ntfy.mjs`** (2026-10-14) — the networking layer,
+      deliberately kept **outside** the library. Its centrepiece is a **data-flow table**: a webhook *is*
+      an instruction to hand the content to someone else's server, so Telegram / Discord / Slack /
+      飞书 / 钉钉 / 企业微信 **cannot** satisfy "it stays on my machines" **by construction** — no
+      configuration changes that. Only self-hosted ntfy/Gotify (with the F-Droid client, which bypasses
+      FCM), Home Assistant local push (WebSocket, not APNs/FCM) and self-hosted Matrix qualify.
+      It also records the gap nobody ships: **the data end and the push end both exist, the middle
+      (read → compute → POST) is yours to write** — shipped as a copy-paste example with `--dry-run`.
+      Rate limits are split into **verified** (ntfy.sh: 60-message burst then 1 per 5 s, messages cached
+      12 h; Slack: ~1 msg/s per channel, 16 KB hard limit, 429 + `Retry-After`) and an explicit
+      **not-verified** list, because quoting an unread limit is how a pipeline truncates silently.
 
 ## Later / on demand
 
 - Gadgetbridge export adapter
 - Apple Health export adapter
-- `npm publish` — one command; the library is already usable straight from source
 
 ## Explicitly not planned
 

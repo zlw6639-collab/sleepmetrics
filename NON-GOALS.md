@@ -97,7 +97,16 @@ owning a questionnaire or drawing a conclusion.
 comparison between people, and imply a threshold. This library reports dimensions (regularity,
 phase, timing) plus the numbers behind each one.
 
-**Where instead.** If you need one number for a UI, compute it *in your app* from these dimensions —
+**Also refused on the same grounds (2026-10-14): a "your value vs the population" comparison table.**
+It is a single-number score with extra steps — it implies a threshold, it compares people, and the
+reference values are usually measured a *different way* than the user's device measures them
+(self-report vs actigraphy vs PSG disagree substantially), so the comparison is not even between
+like things. It also backfires: a reader who is already anxious about "my resting heart rate rose
+2.7 bpm" does not need to be told it is above average.
+
+**Where instead.** Report the user's **own history**: *"your last 30 days sit at the 62nd percentile
+of your own 222 days"* is descriptive, needs no external number, and implies nothing about normal or
+abnormal. If you need one number for a UI, compute it *in your app* from these dimensions —
 and show the components next to it.
 
 ---

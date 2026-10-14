@@ -25,13 +25,25 @@ const HOLIDAYS_PATH = new URL('../data/holidays.json', import.meta.url);
 /** 锚点冻结时刻：2026-10-12 00:00（+08）—— 之后的记录不进这次比对，否则数据增长会把闸门冲掉 */
 const FREEZE = Date.parse('2026-10-12T00:00:00+08:00') / 1000;
 
+/**
+ * 锚点冻结窗口的**下界**：2026-07-13 00:00（+08）。
+ *
+ * ⚠️ FREEZE 只挡**未来**，挡不住**补拉过去**（2026-10-14 踩到）：锚点是基于当时「85 晚主睡眠」算的，
+ * 而全量 SRI 的口径是「**所有天**」—— 一旦用 `probe --days 365` 把云端历史补回来，
+ * 85 天就变成 209 天，锚点被稀释成 74.303 而误报红。
+ * 判据：**固定窗口的两项分毫不变**（近 7 晚 65.972 / SJL 86.03）⇒ 是测试的过滤口径有盲点，不是实现坏了。
+ * 修法（已实测）：连同下界一起钉住 ⇒ 正好复现 85 天 / 78 对 / 剔除 3 天 / **74.108**。
+ * ⇒ 规矩不变：**锚点值一个都不许动，只收紧取数窗口**。
+ */
+const FROM = Date.parse('2026-07-13T00:00:00+08:00') / 1000;
+
 const ANCHOR = { full: 74.1, last7: 66.0, sjl: 86 };
 
 test('★ 回归闸门：截至 2026-10-11 的真实数据必须复现 74.1 / 66.0 / +86', {
   skip: fs.existsSync(REAL) ? false : `未找到真实数据（可用 SLEEPMETRICS_REAL_DATA 指定）：${REAL}`,
 }, () => {
   const raw = JSON.parse(fs.readFileSync(REAL, 'utf8'));
-  const records = mifitToRecords(raw).filter((r) => r.wake < FREEZE);
+  const records = mifitToRecords(raw).filter((r) => r.wake >= FROM && r.wake < FREEZE);
   const all = allSleep(records);
   const main = mainSleep(records);
   const rest = makeRestJudge(JSON.parse(fs.readFileSync(HOLIDAYS_PATH, 'utf8')));
@@ -61,7 +73,7 @@ test('回归闸门：旧口径（minDayMinutes=0）应当**算不出**锚点 —
   skip: fs.existsSync(REAL) ? false : '未找到真实数据',
 }, () => {
   const raw = JSON.parse(fs.readFileSync(REAL, 'utf8'));
-  const records = mifitToRecords(raw).filter((r) => r.wake < FREEZE);
+  const records = mifitToRecords(raw).filter((r) => r.wake >= FROM && r.wake < FREEZE);
   const all = allSleep(records);
   const main = mainSleep(records);
   const legacy = sriLastN(all, main, 7, { minDayMinutes: 0 });

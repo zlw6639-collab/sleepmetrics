@@ -130,6 +130,12 @@ function isFreshPillowStreak(beds, tol = PILLOW_TOL_MIN, n = PILLOW_NIGHTS) {
 }
 
 /**
+ * ⚠️ **生理指标键名禁区（2026-10-14 立规矩）** —— 配 `aside()` 顶部的守卫与
+ * `test/aside-guard.test.js` 的钉子一起看。给新指标加报告行时**别顺手接 aside**。
+ */
+const PHYSIO_KEYS = ['hr', 'hrv', 'bpm', 'spo2', 'heart', 'resp', 'breath', 'temp', 'stress', 'rhr'];
+
+/**
  * 旁白文案（中英各一套）。
  * ⚠️ **刻意不含地域梗** —— 梗会让另一半球的人看不懂，把"惊喜"变成"排除"。
  */
@@ -158,7 +164,19 @@ const ASIDE_TEXT = {
  * 约束（AGENTS.md 硬规矩 4）：纯本地、零依赖、**不改变任何数值**、**绝不出现在 `--json` 上**，最多两行。
  * 触发依据两类：**数据特征**（优先）与**当前时刻**；时刻类的还要再过一道抽样闸门（见 `pick`）。
  */
-function aside({ sri, phase, records, freeDay = null, now = new Date() }) {
+function aside(ctx = {}) {
+  const { sri, phase, records, freeDay = null, now = new Date() } = ctx;
+
+  // ⚠️⚠️ **生理指标禁区（2026-10-14 立规矩）**：任何**心率 / HRV / 血氧 / 呼吸 / 体温 / 压力**
+  // 相关的输出路径**一律不给旁白**（包含趣味文案）。
+  // 理由：这类指标上的"趣味解读"极易被读成**医疗暗示**，而这类数据本身最容易引发焦虑 ——
+  //      它与「不做医疗建议」是同一条底线的两面。
+  // 落地：这里是守卫生效处；`test/aside-guard.test.js` 用「读源码断言调用点」把它钉住
+  //      （bin 是顶层执行的 CLI，**无法 import 进测试** —— 见 AGENTS.md 第 6 条）。
+  // ⇒ 以后给新指标（如 HRV）加报告行时，**别顺手给它接 aside**。
+  const keys = Object.keys(ctx).map((k) => k.toLowerCase());
+  if (keys.some((k) => PHYSIO_KEYS.some((p) => k.includes(p)))) return;
+
   const hour = currentHour();
   const hhmm = `${String(hour).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const md = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

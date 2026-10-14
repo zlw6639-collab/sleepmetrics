@@ -1,6 +1,6 @@
 {
   "name": "sleepmetrics",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Standard sleep metrics in pure JavaScript: sleep regularity index (SRI) and circadian phase (MSFsc / social jetlag). Zero dependencies, no build step, no network, no filesystem.",
   "type": "module",
   "license": "MIT",
@@ -20,6 +20,9 @@
     "data",
     "bin",
     "README.md",
+    "REFERENCES.md",
+    "SLEEP-FACTS.md",
+    "PUSHING-TO-YOUR-PHONE.md",
     "HOLIDAYS.md",
     "DISCLAIMER.md",
     "ROADMAP.md",
@@ -30,7 +33,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node test/time.test.js && node test/records.test.js && node test/sri.test.js && node test/phase.test.js && node test/rest.test.js && node test/suggest.test.js && node test/audit.test.js && node test/rhythm.test.js && node test/regression.test.js",
+    "test": "node test/time.test.js && node test/records.test.js && node test/sri.test.js && node test/phase.test.js && node test/rest.test.js && node test/suggest.test.js && node test/audit.test.js && node test/rhythm.test.js && node test/aside-guard.test.js && node test/regression.test.js",
     "test:one": "node test/sri.test.js",
     "regression": "node test/regression.test.js",
     "check:links": "node scripts/check-links.mjs"

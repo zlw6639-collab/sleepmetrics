@@ -188,6 +188,18 @@ These are the places where a reasonable-looking rewrite silently produces wrong 
    leftover isolated day giving 0 ⇒ **5 pairs**. Read `pairs` and `skipped` together: `sri === null`
    means "no adjacent valid day-pair at all", which is a statement about your **data**, not your sleep.
    → `sri.test.js`: *"中间缺一整晚 ⇒ 不成对、SRI 为 null"* / *"LOO：孤立自然日 isolated=true 且 Δ=0"*
+7. **`tz` is a fixed offset in hours — not a timezone name, and the library has no DST table.**
+   `tz` is read **per record**, so the correct way to handle daylight saving is to carry the offset that
+   was *actually in force for that record*: a summer night in a region that is `+2` in summer and `+1` in
+   winter carries `tz: 2`, its winter counterpart `tz: 1`. What the library will **not** do is work it out
+   for you — pass one constant `2` across the transition and those nights are silently an hour off, which
+   moves bedtimes and can even move a night to the neighbouring calendar day.
+   ⚠️ **This rule has no test pinning it**, unlike 1–6 — it only reproduces in a DST region, and the
+   development machine (China, UTC+8 year-round) cannot produce it. That is precisely why it is written
+   down here instead of being quietly assumed. The same care applies when handing data to another tool
+   (R, Python): convert to **local wall-clock minutes** first, because `as.Date()` in R slices days by
+   `tzone` while this library slices by the offset you passed — two different defaults that both look
+   fine until they disagree by a day.
 
 ## Tests are the spec
 
@@ -274,6 +286,29 @@ node bin/sleepmetrics.js phase records.json --free-days my-days.json   # --holid
 of days as free (or hardly any), the CLI says so instead of printing numbers that quietly mean nothing.
 
 Add `--json` for machine-readable output.
+
+## Three read-only companions
+
+- **[`REFERENCES.md`](REFERENCES.md)** — recommended durations, population distributions, and cohort SRI
+  values, **together with the measurement traps that make most quotes meaningless**: self-report and
+  actigraphy differ by ~1.1 h in the *same people* and correlate at only r = 0.43, and the same NHANES
+  actigraphy data yields a mean of 6.36 h or a median of 7.83–8.26 h depending on the scoring pipeline.
+  **Documentation only — nothing in it is a threshold, and nothing in it is wired into any output.**
+- **[`SLEEP-FACTS.md`](SLEEP-FACTS.md)** — six animals whose sleep is genuinely interesting, each with its
+  measurement method stated (wild EEG vs an implanted actiwatch vs video observation). Deliberately
+  **unconnected** to any metric here: cross-species comparison is three-way incomparable, and it is
+  certainly not a diagnosis.
+- **[`PUSHING-TO-YOUR-PHONE.md`](PUSHING-TO-YOUR-PHONE.md)** — how to get the numbers onto your phone
+  **without handing them to anyone**: which options genuinely keep the data local (self-hosted ntfy or
+  Gotify with the F-Droid client, Home Assistant local push, self-hosted Matrix) and which are an
+  illusion (every third-party IM webhook — Telegram, Discord, Slack, 飞书, 钉钉, 企业微信 — carries the
+  message through the vendor's servers **by construction**; no configuration changes that). Ships with a
+  copy-paste example and the rate limits that were actually verified rather than assumed.
+
+All three exist for the same reason this library has a regression gate: **a number without its
+measurement method is not a number** — and the pipeline that carries it is part of its meaning too. They
+are also the answer to *"why won't this library tell me whether my value is normal?"* — see
+[`NON-GOALS.md`](NON-GOALS.md) §9.
 
 ## References
 

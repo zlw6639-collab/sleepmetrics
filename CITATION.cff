@@ -12,8 +12,8 @@ type: software
 authors:
   - name: "猫咖没有猫猫"
 license: MIT
-version: 0.1.0
-date-released: "2026-10-13"
+version: 0.1.1
+date-released: "2026-10-14"
 repository-code: "https://github.com/zlw6639-collab/sleepmetrics"
 url: "https://github.com/zlw6639-collab/sleepmetrics"
 keywords:
