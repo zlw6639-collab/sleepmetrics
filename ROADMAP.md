@@ -218,3 +218,21 @@ and the last section lists what will **not** happen.
 
 Published **as-is, with no maintenance promise**. Issues may sit unanswered. Use it, fork it,
 vendor it — MIT.
+
+### If this stops being maintained
+
+That promise is meant literally, so here is what to do when you need to move on:
+
+- **Your data was never here.** The library does not read files, write files or touch the network —
+  every input arrives through *your* adapter. There is no export step to perform, because there is
+  nothing to export *from*.
+- **The formulas are the portable part.** SRI is Phillips et al. 2017 (*Sci Rep* 7:3216); MSFsc/SJL
+  follow Roenneberg's MCTQ, and this implementation was cross-checked against R's `mctq` down to
+  0.000000 h. Any of those sources is a safer long-term dependency than a JS package — including
+  this one.
+- **The numbers are pinned.** `test/regression.test.js` (private data) and
+  `test/anchor-synthetic.test.js` (deterministic synthetic data, runs anywhere) fix the expected
+  outputs, so a fork can tell within seconds whether it still computes the same thing.
+- **Vendoring is expected, not a fallback.** The published tarball **is** the source: 23 files, zero
+  dependencies, no build step, no postinstall. Copy them in, keep the ones you use, and there is no
+  upgrade treadmill to fall off.
