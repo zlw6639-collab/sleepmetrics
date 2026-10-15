@@ -8,6 +8,63 @@ All notable changes to this project are documented here. The format follows
 > never a patch** (`RELEASE.md` §2). The regression anchors are **74.108 / 65.972 / 86.03** and they
 > have not moved since 0.1.0.
 
+## [0.3.0] — 2026-10-15
+
+> **One change in this release can reject input that used to be accepted — deliberate, and it cannot
+> move a number.** A `tz` outside **−12…+14 hours** is now refused instead of accepted (see *Changed*).
+> The regression anchors **74.108 / 65.972 / 86.03** are byte-for-byte the same as in 0.2.0, and the
+> synthetic anchors are unchanged.
+
+### Changed
+
+- **★ `tz` is now range-validated** — `[−12, +14]` hours, the real-world extremes (Baker Island …
+  Kiritimati). Previously *any* finite number was accepted, so `tz: 25` or `tz: 480` (minutes passed
+  as hours — the single most likely mis-unit here) was taken **literally**, shifting every day
+  boundary: day attribution, SRI day-pairs and phase windows all move, **the digits still look like
+  numbers, and no assertion can see it**. That is exactly the "quietly wrong" failure this project
+  refuses, so it is now a **visible** failure.
+  - **Function-level** options (`computeSRI({tz})`, `normalize(recs, tz)`, `computePhase`, `suggest`,
+    `auditRecords`, `dayOf`, `gridTz`…) ⇒ **throws `TypeError`**, message naming both the value and
+    the allowed range.
+  - **Record-level** `record.tz` ⇒ `normalize()` and the SRI grid's inference path **also refuse**;
+    `auditRecords()` keeps its "dirty data never throws" contract and reports **`tz.out-of-range` at
+    `error` severity** (a new rule) while falling back to the default.
+  - One judgement call, shared by all of them: `TZ_MIN` / `TZ_MAX` / `isPlausibleTz()` in `src/time.js`,
+    so `resolveTz()` and `auditRecords()` can never drift apart again.
+- **`isPlausibleTz(null)` was `true`** while `isPlausibleTz(undefined)` was `false` — because
+  `Number(null)` and `Number('')` are both **0**. Left alone, "**not given**" would have quietly become
+  "**UTC+0**" while `resolveTz(null)` means "use the default". Now `null` / `undefined` / `''` / `[]`
+  are all `false`; numeric strings like `'8'` are still accepted (same convention as record-level `tz`).
+
+### Fixed
+
+- **SRI's documented range said `0~100`; it is `−100~100`.** The formula is `−100 + 200·(same
+  fraction)`, and the `−100` term is reachable — a window that swings far enough makes same-clock
+  states systematically opposite. **Docs only** (the `SRIResult.sri` JSDoc and the module header);
+  **no number changed**. Now pinned by an executable assertion in `test/sri.test.js` that **reaches
+  both bounds** (100 for identical days, −100 for exactly complementary ones), so the range cannot
+  drift back into prose.
+
+### Docs
+
+- **README first screen rebuilt** — project purpose, a **required-fields table** (what `bed` / `wake`
+  / `tz` / `dur` / `stages` are, and that `bed`/`wake` are **epoch seconds**), a **copy-paste example
+  with its real output**, and the **interactive-page entry** are now all above the fold. The two
+  silent failure modes get named right there, with links.
+- **Teaching page on the current CDN version** — `docs/index.html` now imports
+  `sleepmetrics@0.2.0` instead of `@0.1`.
+  ⚠️ **Verified against the CDN, not assumed:** esm.sh resolves `@0.2.0` (HTTP 200) and the served
+  bundle imports and computes — `computeSRI()` on four identical nights returns `100`. That probe
+  also shows the flip side of the change above: the published 0.2.0 **accepts `tz: 480`**, which is
+  what 0.3.0 rejects.
+
+### Tests
+
+- **115 → 122 assertions**, all values unchanged: `isPlausibleTz` boundaries and type traps
+  (`test/time.test.js`), all entries rejecting out-of-range `tz` while `auditRecords()` reports instead
+  of throwing (`test/contract.test.js`), the `tz.out-of-range` severity + "in-range values must not be
+  caught in the crossfire" pair (`test/audit.test.js`), and the SRI range bounds (`test/sri.test.js`).
+
 ## [0.2.0] — 2026-10-15
 
 > **Two changes in this release can move a number — both deliberate.**

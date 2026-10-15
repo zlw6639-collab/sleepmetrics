@@ -41,6 +41,40 @@ test('audit：dur 不是数字要报出来（原先整段被跳过 ⇒ 静默无
   assert.ok(!rules(nil).includes('dur.too-short'), 'null 不该被当成 0 分钟');
 });
 
+test('★ audit：tz 超出合理范围 ⇒ error 级 tz.out-of-range（量纲错误不许只给 warn）', () => {
+  let r;
+  assert.doesNotThrow(() => {
+    r = auditRecords([
+      { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 9), tz: 480 },
+      { bed: fx.at(fx.d(2), 1), wake: fx.at(fx.d(2), 9), tz: 25 },
+    ]);
+  });
+  const hit = r.issues.filter((x) => x.ruleId === 'tz.out-of-range');
+  assert.equal(hit.length, 2);
+  assert.equal(hit[0].severity, 'error');
+  assert.ok(!rules(r).includes('tz.not-a-number'), '是数但超范围，不该被说成「不是数字」');
+  assert.equal(r.summary.ok, false, '有 error ⇒ ok 必须为 false');
+  // ★ 体检工具不许被脏数据搞崩：记录仍被收下、日期仍算得出来（按默认 tz）
+  assert.equal(r.summary.records, 2);
+  assert.equal(r.summary.days, 2);
+});
+
+test('audit：范围**内**的小数 / 边界时区不许被这次收紧误伤', () => {
+  // ⚠️ 三条记录用**同一个** tz：混用不同 tz 会（正确地）触发 `tz.mixed`，那是另一条规则
+  const r = auditRecords([
+    { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 9), tz: -12 },
+    { bed: fx.at(fx.d(2), 1), wake: fx.at(fx.d(2), 9), tz: -12 },
+    { bed: fx.at(fx.d(3), 1), wake: fx.at(fx.d(3), 9), tz: -12 },
+  ]);
+  assert.equal(r.issues.length, 0, `不该报任何问题，实际：${JSON.stringify(rules(r))}`);
+  assert.equal(r.summary.ok, true);
+
+  for (const ok of [-12, 14, 5.75, 0, 8]) {
+    const one = auditRecords([{ bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 9), tz: ok }]);
+    assert.ok(!rules(one).includes('tz.out-of-range'), `tz=${ok} 是合法时区，不该报超范围`);
+  }
+});
+
 /* ─────────── stages 编码：数值合法 ≠ 语义正确（2026-10-14 外部评审）─────────── */
 
 test('★ stages.no-awake：样本够却一个清醒段都没有 ⇒ 开口，且必须给两种解释（不断言）', () => {

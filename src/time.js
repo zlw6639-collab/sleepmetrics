@@ -32,13 +32,58 @@ export const mod = (x, m = MIN_PER_DAY) => ((x % m) + m) % m;
 export const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 
 /**
- * ★ `tz` 参数的**唯一判据** —— 固定偏移小时数（**不是** IANA 时区，库不知道夏令时），必须是有限数。
+ * ★ `tz` 判据的**合理范围**（小时偏移，闭区间）—— `resolveTz()` 与 `isPlausibleTz()` 共用。
+ *
+ * 边界取的是**真实世界的极值**：最西 −12（Baker Island / AoE 一带）、最东 +14（Kiritimati）。
+ * 允许小数，因为 +5:45（尼泊尔）这类偏移是真实存在的。
+ * 超出这个区间的小时数**不可能是时区**，只可能是把「分钟」或「毫秒」误填进来（如 480 / 28800）。
+ */
+export const TZ_MIN = -12;
+export const TZ_MAX = 14;
+
+/**
+ * `tz` 是否是**合理时区**：有限数、且落在 `[TZ_MIN, TZ_MAX]` 内。
+ *
+ * ⚠️ 这是**判据**（判），不是转换（解）。`auditRecords()` 用它把「不合理」报成**可见的一句话**；
+ *    `resolveTz()` 用它把「不合理」变成**抛出的 `TypeError`**——两边判据同一个，结论才可能一致。
+ *
+ * ⚠️ **`null` / `undefined` / `''` / `[]` ⇒ `false`**（缺省不是时区）。这条不是洁癖：
+ *    `Number(null)` 是 **0**、`Number('')` 也是 **0**，若照收就会把「**未给**」悄悄变成
+ *    「UTC+0」——而 `resolveTz(null)` 的语义恰恰是「用默认值」（默认 8）。两边一旦不一致，
+ *    `normalize()` 与 `resolveTz()` 就会对同一条记录给出不同时区。
+ *    （2026-10-15 写这条判据时实际踩到：`isPlausibleTz(null) === true` 而 `undefined === false`。）
+ *    字符串数字仍然接受（`'8'` ⇒ true），与「记录级 tz」的口径一致。
+ *
+ * @param {unknown} tz
+ * @returns {boolean}
+ */
+export function isPlausibleTz(tz) {
+  if (typeof tz === 'number') return Number.isFinite(tz) && tz >= TZ_MIN && tz <= TZ_MAX;
+  if (typeof tz === 'string') {
+    if (tz.trim() === '') return false; // `Number('')` 是 0，但它不是时区
+    const n = Number(tz);
+    return Number.isFinite(n) && n >= TZ_MIN && n <= TZ_MAX;
+  }
+  return false;
+}
+
+/**
+ * ★ `tz` 参数的**唯一判据** —— 固定偏移小时数（**不是** IANA 时区，库不知道夏令时），
+ * 必须是有限数**且落在 `[TZ_MIN, TZ_MAX]`**（见 `isPlausibleTz`）。
  *
  * ⚠️ 不合法时**抛**，而不是回退默认值。这一点是刻意的，而且与「**数据**不合法」的处理**相反**：
  *   · 数据不合法 ⇒ 返回 `null` / `[]`（不猜；见 `records.js` 顶部那条统一规则）；
  *   · **配置**不合法 ⇒ 抛 `TypeError`。因为静默回退会**按另一个时区算**，而差一个时区就可能在
  *     「跨午夜归哪一天」上差一天 —— 报告里的日期、SRI 的天对会跟着全变，**任何断言都看不见它**。
  *     本项目最反对「悄悄给错」，所以这里选择**可见的失败**。
+ *
+ * ⚠️ **2026-10-15 收紧**：原来只要求「有限数」⇒ `tz: 25` / `tz: 480`（把分钟当小时）会被
+ *    **原样接受**，而它会平移每一个 `dayOf()` ⇒ 日归属、SRI 天对、相位窗口**全变**，
+ *    同时**任何断言都看不见**（数字照出、量纲全错）。现在这类值一律拒绝：
+ *      · 函数级（选项 / 参数）⇒ 抛 `TypeError`；
+ *      · 记录级（`record.tz`）⇒ 也抛（`normalize()` 与 `sri` 的推断路径共用本函数）。
+ *    `auditRecords()` 是**例外**：它返回诊断报告，所以对**记录级**不合理值报
+ *    `tz.out-of-range`（`error` 级）并回退默认值，而不是抛 —— 体检工具不许被脏数据搞崩。
  *
  * `null` / `undefined` ⇒ 用 `fallback`（视同「未给」，与 `dur: null` 同一语义）。
  * 字符串数字（`'8'`）接受，会 `Number()` 化 —— 与「**记录级** tz」的回退口径保持一致。
@@ -49,15 +94,22 @@ export const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 
  * @param {string} where 调用点名字（出现在错误消息里，便于定位是谁收到的）
  * @param {number} [fallback=8]
  * @returns {number}
- * @throws {TypeError} 不是有限数
+ * @throws {TypeError} 不是有限数，或超出 `[TZ_MIN, TZ_MAX]`
  */
 export function resolveTz(tz, where, fallback = 8) {
   // 快路径：`dayOf()` 会在 `buildGrid()` 的标记循环里被每分钟调一次，别让它慢下来。
-  if (typeof tz === 'number' && Number.isFinite(tz)) return tz;
+  // 小数值一律合法（范围必然满足），所以这条快路径和下面那条判据**不冲突**。
+  if (typeof tz === 'number' && Number.isFinite(tz) && tz >= TZ_MIN && tz <= TZ_MAX) return tz;
   if (tz === null || tz === undefined) return fallback;
   const n = Number(tz);
   if (!Number.isFinite(n)) {
     throw new TypeError(`${where}: tz 必须是有限数（固定偏移小时，如 8；收到 ${String(tz)}）`);
+  }
+  if (!isPlausibleTz(n)) {
+    throw new TypeError(
+      `${where}: tz=${String(tz)} 超出合理时区范围 [${TZ_MIN}, ${TZ_MAX}] 小时`
+      + `（收到的是分钟或毫秒？本库要的是小时偏移，如 8）`,
+    );
   }
   return n;
 }

@@ -9,7 +9,7 @@
  *   · **只报告，不修改** —— 怎么清洗是调用方的事（也符合"库不碰文件系统"的边界）；
  *   · 不做"数据质量评分" —— 那会诱导人盯着一个分数，而不是去看具体哪条记录坏了。
  */
-import { dayOf, SEC_PER_DAY, resolveTz } from './time.js';
+import { dayOf, SEC_PER_DAY, isPlausibleTz, resolveTz, TZ_MAX, TZ_MIN } from './time.js';
 import { recordFaults } from './records.js';
 
 /** 短于这个时长的"睡眠段"多半是误录（也可能是真小睡，所以只算 info） */
@@ -156,15 +156,24 @@ export function auditRecords(records, opts = {}) {
       push('dur.too-long', 'warn', `单段 ${Math.round(dur)} 分钟，超过 24 小时`, { index });
     }
 
-    // tz 校验：非数字必须在这一层拦住并报出来 —— 否则下面 `dayOf(wake, 'xx')` 会
+    // tz 校验：非数字**必须**在这一层拦住并报出来 —— 否则下面 `dayOf(wake, 'xx')` 会
     // `new Date(NaN).toISOString()` 抛 RangeError：**体检工具被脏数据搞崩**，
     // 而它正是防脏的最后一道（2026-10-13 实测踩到）。
+    // ★ 2026-10-15 收紧：判据与 `resolveTz()` **同一套**（`isPlausibleTz`），并分成两档 ——
+    //   ① 不是有限数 ⇒ `tz.not-a-number`（warn，回退默认值）；
+    //   ② 是数但超出 [TZ_MIN, TZ_MAX] ⇒ `tz.out-of-range`（**error**，回退默认值）。
+    //   为什么 ② 是 error 而不是 warn：`tz: 25`、`tz: 480`（分钟当小时）会**平移这条记录的
+    //   `ds`（醒来日）**，于是"缺主睡眠的天数"、SRI 的天对、相位窗口**全跟着变**，而数字照出、
+    //   量纲全错 —— 正是本项目最反对的「悄悄给错」。体检工具的职责就是把沉默的错误变成可见的话。
+    //   ⚠️ 回退（而不是抛）仍是对的：这是**记录级**输入，体检不许被脏数据搞崩。
     let tzUse = tz;
     if (r.tz !== undefined && r.tz !== null) {
       const tzNum = Number(r.tz);
-      if (Number.isFinite(tzNum)) {
+      if (isPlausibleTz(tzNum)) {
         tzUse = tzNum;
         tzSet.add(tzNum);
+      } else if (Number.isFinite(tzNum)) {
+        push('tz.out-of-range', 'error', `tz=${tzNum} 超出合理时区范围 [${TZ_MIN}, ${TZ_MAX}] 小时（收到的是分钟或毫秒？本库要的是小时偏移，如 8）—— 已按默认 ${tz} 计算，但**这条记录的「醒来日」会因此改变**`, { index });
       } else {
         push('tz.not-a-number', 'warn', `tz=${JSON.stringify(r.tz)} 不是有效数字（本库要小时偏移，如 8）—— 已按默认 ${tz} 计算`, { index });
       }

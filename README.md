@@ -6,6 +6,63 @@ Standard sleep metrics in pure JavaScript: **sleep regularity (SRI)** and **circ
 **Zero runtime dependencies. No build step. No network. No filesystem.** You pass in an array of
 sleep records, you get numbers — and the rule + number behind each one.
 
+## What you need to give it
+
+Three fields per record. Everything else is optional:
+
+| field | required | meaning |
+|---|---|---|
+| `bed` | ✅ | time you got into bed — **epoch seconds** (not milliseconds, not a string) |
+| `wake` | ✅ | time you got up — **epoch seconds** |
+| `tz` | — | fixed **hours** offset (e.g. `8`); defaults to the `tz` you pass to a function |
+| `dur` | — | minutes asleep; derived from `(wake − bed) / 60` when omitted |
+| `stages` | — | optional segments — they make SRI more accurate (see the awake-code warning below) |
+
+Two things that silently ruin results if you get them wrong — **`bed`/`wake` must be epoch
+*seconds***, and **`tz` is a fixed offset, never an IANA zone** (this library does not know about DST).
+Both are documented with measured examples in [`TIMESTAMPS.md`](TIMESTAMPS.md).
+
+## See it move, or run it now
+
+> **The interactive page — <https://zlw6639-collab.github.io/sleepmetrics/>** — recomputes SRI live as
+> you drag two sliders. It exists because *"average bedtime and regularity are different axes"* is
+> something you have to **watch**: move the *centre* slider and the average moves while SRI holds;
+> move the *amplitude* slider and the average holds while SRI falls. It imports this library from a
+> CDN and uses **synthetic data only**.
+
+**No data required to see real output** — this builds eight identical nights and prints genuine
+results. Save it as `example.mjs` and run `node example.mjs`:
+
+```js
+import { allSleep, mainSleep, computeSRI, sriLastN, auditRecords } from 'sleepmetrics'
+
+const tz = 8
+const day = (i) => Date.UTC(2026, 2, i) / 1000 - tz * 3600   // 2026-03-NN 00:00 local
+const records = Array.from({ length: 8 }, (_, i) => ({
+  bed:  day(i + 1) + 1 * 3600,
+  wake: day(i + 1) + 9 * 3600,
+  tz,
+}))
+
+const all  = allSleep(records)    // naps included — SRI uses this
+const main = mainSleep(records)   // main sleep only (>180 min) — phase uses this
+
+console.log(auditRecords(records).summary)
+console.log(computeSRI(all))
+console.log(sriLastN(all, main, 7).sri)
+```
+
+It prints (verified 2026-10-15):
+
+```
+{ records: 8, days: 8, daysWithoutMainSleep: 0, bySeverity: { error: 0, warn: 0, info: 0 }, ok: true }
+{ sri: 100, days: 8, pairs: 7, from: '2026-03-01', to: '2026-03-08', skipped: [] }
+100
+```
+
+Eight identical nights ⇒ **SRI = 100**. That is the sanity check worth seeing *before* you feed the
+library anything real — once this matches, swap in your own `records`.
+
 > 🧩 **TypeScript users**: no `.d.ts` is shipped yet. Enable `allowJs` and you get types straight from
 > the JSDoc. A **hand-written** `.d.ts` is item #1 on the [roadmap](ROADMAP.md) — this project will
 > not grow a build chain for it. See [Types without a build step](#types-without-a-build-step).

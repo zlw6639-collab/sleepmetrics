@@ -17,6 +17,26 @@ test('整体后移 1 分钟 ⇒ 手算 -100 + 200·1438/1440（只有 2 个 epoc
   assert.ok(Math.abs(r.sri - expected) < 1e-9, `实际 ${r.sri}，手算 ${expected}`);
 });
 
+test('★ SRI 的取值范围是 −100~100（不是 0~100 的"分数"）—— 上下界都能真的取到', () => {
+  // 上界：两天逐位相同 ⇒ 100
+  const a = computeSRI(allSleep(fx.steadyPair()));
+  assert.equal(a.sri, 100);
+
+  // 下界：两天的睡眠窗口**恰好互补**（各 12h、错开 12h）⇒ 同一钟点状态永远相反
+  // ⇒ 同一态占比 0 ⇒ −100 + 0 = **−100**。
+  // （⚠️ 别用「一天睡 8h、另一天全醒」来构造：那天只有 480 分钟睡眠，过了门槛，
+  //   但两天的**同态占比**还有 1/3，得到的是 −33.33 —— 不是下界。）
+  const b = computeSRI(allSleep([
+    { bed: fx.at(fx.d(1), 0), wake: fx.at(fx.d(1), 12), tz: fx.TZ },
+    { bed: fx.at(fx.d(2), 12), wake: fx.at(fx.d(2), 24), tz: fx.TZ },
+  ]));
+  assert.equal(b.sri, -100, `逐位相反必须给 −100，实际 ${b.sri}`);
+
+  // 反面教材守卫：下界**不是** 0 —— 谁把范围当成 0~100，谁就会把 −100 读成"最差"而不是"反着"
+  assert.ok(b.sri < 0, '负值是这条定义的自然结果，不许被夹到 0');
+  assert.ok(a.sri <= 100 && b.sri >= -100, '上下界都不许越出 [−100, 100]');
+});
+
 test('中间缺一整晚 ⇒ 不成对、SRI 为 null（不许拿「全醒日」充数）', () => {
   const r = computeSRI(allSleep(fx.missingMiddleNight()));
   assert.equal(r.days, 2);

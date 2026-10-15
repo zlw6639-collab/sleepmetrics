@@ -288,6 +288,42 @@ test('★ 合法 tz 不许被这次收紧误伤（0 / 负数 / 半小时时区 /
   assert.equal(normalize([{ ...recs[0], tz: 'xx' }])[0].tz, 8);
 });
 
+test('★ tz 超出合理范围 [−12, +14] ⇒ 每个入口都拒绝（统一判据，不是各判一套）', () => {
+  const recs = [{ bed: k(1), wake: k(9) }];
+  // 25 / 480 都是「把分钟或毫秒当小时」的典型量纲错误：会被原样接受、平移每一个日界，
+  // 而数字照出、任何断言看不见 —— 所以必须**可见地失败**。
+  for (const bad of [25, 480, -13, 14.5]) {
+    assert.throws(() => normalize(recs, bad), /超出合理时区范围/, `normalize tz=${bad}`);
+    assert.throws(() => buildGrid(recs, bad), /超出合理时区范围/, `buildGrid tz=${bad}`);
+    assert.throws(() => computeSRI(recs, { tz: bad }), /超出合理时区范围/, `computeSRI tz=${bad}`);
+    assert.throws(() => computePhase(recs, () => false, { tz: bad }), /超出合理时区范围/, `computePhase tz=${bad}`);
+    assert.throws(() => suggest(recs, { tz: bad }), /超出合理时区范围/, `suggest tz=${bad}`);
+    assert.throws(() => dayOf(0, bad), /超出合理时区范围/, `dayOf tz=${bad}`);
+  }
+  // auditRecords 是**例外**（它返回诊断报告，不许被脏数据搞崩）：不抛，报 error 级问题
+  let aud;
+  assert.doesNotThrow(() => { aud = auditRecords([{ bed: k(1), wake: k(9), tz: 480 }]); });
+  assert.ok(aud.issues.some((i) => i.ruleId === 'tz.out-of-range' && i.severity === 'error'));
+});
+
+test('★ 边界时区不许被这次收紧误伤（±12/+14 与小数偏移都算合法）', () => {
+  const recs = [{ bed: k(1), wake: k(9) }];
+  assert.equal(normalize(recs, -12)[0].tz, -12);
+  assert.equal(normalize(recs, 14)[0].tz, 14);
+  assert.equal(normalize(recs, 5.75)[0].tz, 5.75); // 尼泊尔 +5:45
+  // 记录级：范围内小数照常采用
+  assert.equal(normalize([{ ...recs[0], tz: 5.75 }])[0].tz, 5.75);
+  // 记录级**超范围**值不许被静默采用（回退默认 + audit 报出来）
+  assert.equal(normalize([{ ...recs[0], tz: 480 }])[0].tz, 8);
+  // SRI 的推断路径：超范围值不许被拿来当参考时区（推断出来仍是默认 8）
+  const same = [
+    { bed: localAt(8, 1, '2026-03-01'), wake: localAt(8, 9, '2026-03-01'), tz: 8 },
+    { bed: localAt(8, 1, '2026-03-02'), wake: localAt(8, 9, '2026-03-02'), tz: 8 },
+  ];
+  const mixed = [{ ...same[0], tz: 480 }, { ...same[1], tz: 480 }];
+  assert.equal(computeSRI(mixed).sri, computeSRI(same).sri, '超范围 tz 被忽略 ⇒ 与默认 8 同结果');
+});
+
 /* ─────────── SRI 的日界线：整段一个参考时区 ─────────── */
 
 /** 当地某日 `h` 点 → epoch 秒（写测试时手算跨时区用例用） */

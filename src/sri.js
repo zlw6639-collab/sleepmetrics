@@ -13,6 +13,12 @@
  * 语义：完全规律 = 100，完全随机 = 0。**与睡眠时长不相关（r=0.05）** —— 它是独立维度，
  *      别拿它当「睡得好不好」的替身。
  *
+ * 取值：**−100~100**（不是 0~100 的「分数」）。下界是公式里那个 `−100` 的自然结果：把
+ *      相隔 24h 的同一钟点两两比对时，「钟点相同、状态却总反着」会让同一态占比**低于**随机
+ *      基线（50%），于是 SRI 落到 0 以下 —— 实测的负值来自睡眠窗口在 24h 里大幅摆动（见
+ *      `test/contract.test.js` 的跨时区旅行用例与 `docs/index.html` 的取值范围表）。
+ *      ⇒ 下游若拿 0 当「最差」，会对负值产生**方向性误读**：比随机更糟也是一种结果。
+ *
  * ⚠️ **口径冻结（改它会动数字）**：本实现**逐位对齐** `mifit/metrics.mjs` 的 2026-10-11 修正后口径，
  *    并由 `test/regression.test.js` 钉死（真实数据锚点：全量 **74.108** / 近 7 晚 **65.972**）。
  *    会动数字的改动升 **minor 或 major**，**不是** patch（本项目的版本规则）。
@@ -31,7 +37,7 @@
  *   4. **窗口锚点只允许有一处** —— 见 `sriLastN()`。拿「当天最后一段睡眠」（往往是小睡）当锚，
  *      窗口会整体前移一天：同一个「近 7 晚」能算出两个值（实测 66.0 vs 61.0）。
  */
-import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec, resolveTz } from './time.js';
+import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec, isPlausibleTz, resolveTz } from './time.js';
 // ⚠️ 时间戳可表示范围是**同一个判据**：`records.js` 用它决定「这条记录算不算数」，
 //    这里用它保证 `buildGrid()` 的标记循环不会挂死。⇒ 共享常量，别各写一份（两份会漂）。
 import { DATE_MAX_SEC } from './records.js';
@@ -66,7 +72,10 @@ function gridTz(records, tz, where) {
   const seen = new Set();
   for (const r of records) {
     const n = Number(r?.tz);
-    if (Number.isFinite(n)) seen.add(n);
+    // ★ 推断路径用**同一个合理范围判据**（`isPlausibleTz`）：`tz: 25` / `tz: 480`（分钟当小时）
+    //   不是时区，**不许**被拿来当参考时区 —— 它会平移每一个日界，而数字照出、量纲全错。
+    //   这类值由 `normalize()`（抛出）或 `auditRecords()`（报 `tz.out-of-range`）负责报出来。
+    if (isPlausibleTz(n)) seen.add(n);
     if (seen.size > 1) return 8;
   }
   return seen.size === 1 ? [...seen][0] : 8;
@@ -187,7 +196,7 @@ const sriOf = (same, pairCount) => (pairCount ? -100 + (200 * same) / (pairCount
 /**
  * `computeSRI()` / `sriLastN()` 的返回。
  * @typedef {object} SRIResult
- * @property {number|null} sri 0~100；`null` = **没有任何「相邻且有效」的天对** —— 这是关于**数据**的陈述，不是关于睡眠的
+ * @property {number|null} sri **−100~100**（不是 0~100 的「分数」）；`null` = **没有任何「相邻且有效」的天对** —— 这是关于**数据**的陈述，不是关于睡眠的
  * @property {number} days 参与计算的有效天数
  * @property {number} pairs 天对数（相邻两天都通过有效天门槛才算一对）
  * @property {string|null} from 窗口内第一天（`YYYY-MM-DD`）
