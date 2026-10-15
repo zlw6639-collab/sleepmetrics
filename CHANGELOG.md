@@ -8,7 +8,13 @@ All notable changes to this project are documented here. The format follows
 > never a patch** (`RELEASE.md` §2). The regression anchors are **74.108 / 65.972 / 86.03** and they
 > have not moved since 0.1.0.
 
-## [Unreleased]
+## [0.2.0] — 2026-10-15
+
+> **This release moves one number on purpose.** The synthetic IS anchor goes 0.7588 → 0.4228 because
+> `computeIS()` was missing the overall-mean centring — see the IS entry under *Fixed*. Under
+> `RELEASE.md` §2 that makes it a **minor** bump, not a patch. The real-data anchors
+> **74.108 / 65.972 / 86.03** are unchanged, and so are the synthetic SRI / phase anchors.
+> It also carries `TIMESTAMPS.md`, which missed the 0.1.1 tarball.
 
 ### Added
 
