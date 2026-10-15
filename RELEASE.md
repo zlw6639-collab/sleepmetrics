@@ -14,7 +14,7 @@ steps are portable.
 > ```powershell
 > pwsh -File scripts\verify-all.ps1
 > ```
-> It covers 18 items — syntax gate · all 10 test files · the regression anchors · README links ·
+> It covers 18 items — syntax gate · all 12 test files · the regression anchors · README links ·
 > published-tarball contents · the `--json` contract (key set must not change) · zero dependencies and
 > no IO imports in `src/` · both `examples/` scripts · the **R cross-check against `mctq`** · the local
 > `analyze` / `report` / `rhythm` / `datacheck` scripts and the nudge gate · doc-tree hash parity ·
@@ -28,7 +28,7 @@ steps are portable.
 node --check bin\sleepmetrics.js
 
 # b) tests, one file at a time (batch `node --test test/` may hit EPERM in a sandbox)
-foreach ($f in 'time','records','sri','phase','rest','suggest','audit','rhythm','aside-guard','anchor-synthetic','regression') {
+foreach ($f in 'time','records','contract','sri','phase','rest','suggest','audit','rhythm','aside-guard','anchor-synthetic','regression') {
   node "test\$f.test.js" | Select-String 'pass |fail '
 }
 
@@ -144,6 +144,29 @@ npm pack --dry-run
 git commit -am "0.1.1: ..." ; git tag -a v0.1.1 -m "0.1.1" ; git push --follow-tags
 npm publish
 ```
+
+> ⚠️ **On this machine, `git push` needs two extra flags** (measured 2026-10-15). Without them it fails
+> in a way that *looks* like a credential problem and is not:
+>
+> ```powershell
+> git -c http.proxy=http://127.0.0.1:10090 -c http.sslBackend=openssl push origin main
+> ```
+>
+> Three separate things stack up here, and any one of them alone blocks the push:
+>
+> 1. **`github.com` is not reachable directly.** DNS resolves and TCP connects, but nothing comes back
+>    over HTTPS — while `api.github.com` answers `200`. The Windows system proxy at `127.0.0.1:10090`
+>    works. (Read yours from `HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings` →
+>    `ProxyServer`. Command-line tools do **not** pick up the system proxy on their own.)
+> 2. **The `schannel` TLS backend cannot start here** —
+>    `AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030e)`. `openssl` works.
+> 3. **Git Credential Manager cannot run inside a confined shell**: it needs a named pipe, which the
+>    sandbox refuses (`sh: couldn't create signal pipe, Win32 error 5`). So the push itself has to run
+>    in a **normal terminal** — with the flags above, `git push` there (GCM intact, credentials already
+>    stored) succeeds, and the remote head matches `HEAD`.
+>
+> Rule of thumb: if `git push` fails and the message mentions `schannel` or a signal pipe, it is this
+> environment — not your credentials.
 
 ## 6. Things this project will never do at release time
 
