@@ -387,3 +387,31 @@ test('★ IS / IV：极端但有限的输入 ⇒ null（原来返回 NaN —— 
   const okIv = computeIV([1, 2, 3]);
   assert.ok(okIv !== null && Number.isFinite(okIv.iv));
 });
+
+/* ─────────── 文档与实现同口径（2026-10-15：范围说明漂移过一次）─────────── */
+
+/**
+ * 为什么值得一条测试：`src/sri.js` 的 `@property` 修成 `−100~100` 之后，**CLI 帮助文案**
+ * 还写着「完全规律 = 100，完全随机 = 0」，用户直接看到的那一句反而是旧的（2026-10-15 外部评审发现）。
+ * 「散文里的数字」没有任何断言看得见 —— 所以这里把它变成可执行检查：
+ * **凡提到取值范围的地方，只允许 `−100~100` 这一种说法。**
+ */
+test('★ SRI 的取值范围：文档、CLI 文案、README 必须同一口径（只允许 −100~100）', () => {
+  const files = ['src/sri.js', 'bin/sleepmetrics.js', 'README.md'];
+  const anyRange = /(?:[−-]\s*100\s*~|\b0\s*~\s*100|\b0\s*\.\.\s*100)/;
+  for (const f of files) {
+    const txt = fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+    for (const line of txt.split('\n')) {
+      if (!anyRange.test(line)) continue;
+      assert.ok(
+        line.includes('−100~100'),
+        `${f} 这行提到取值范围却不是「−100~100」：${line.trim()}`,
+      );
+    }
+  }
+  // 三处都必须**真的写出**了范围，否则上面那条会变成空转（"没有错"≠"讲了"）
+  for (const f of ['src/sri.js', 'bin/sleepmetrics.js']) {
+    const txt = fs.readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+    assert.ok(txt.includes('−100~100'), `${f} 应当写出 SRI 的取值范围`);
+  }
+});

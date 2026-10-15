@@ -5,8 +5,45 @@ All notable changes to this project are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > Numbers are a compatibility surface in this library: **any change that moves one is a minor bump,
-> never a patch** (`RELEASE.md` §2). The regression anchors are **74.108 / 65.972 / 86.03** and they
-> have not moved since 0.1.0.
+> never a patch** (`RELEASE.md` §2).
+>
+> ⚠️ Two different things are pinned here — do not read one for the other:
+> **real-data anchors** `74.108 / 65.972 / 86.03` have not moved since `0.1.0`; the
+> **synthetic anchors** have — `0.2.0` deliberately moved the synthetic IS anchor `0.7588 → 0.4228`
+> when the missing overall-mean centring was fixed. Each release below says which of the two it touched.
+
+## [0.3.1] — 2026-10-15
+
+> **No number moved — this is consistency repair only.** The regression anchors
+> **74.108 / 65.972 / 86.03** and every synthetic anchor are identical to `0.3.0`. What it fixes is
+> **two places that still described the old behaviour** after `0.3.0` changed it — found by an external
+> review, which is exactly the failure mode prose-only changes have: nothing fails when they drift.
+
+### Fixed
+
+- **The CLI still said "完全规律 = 100，完全随机 = 0"** while `0.3.0` had already corrected SRI's
+  documented range to **−100~100**. The line users actually read (`sri` output) and the `--help` text
+  now both state the range and what the negative side means (*worse than chance*, not *worst*).
+  The JSDoc was right and the CLI was stale — **the reader-facing copy was the one left behind**.
+- **The CHANGELOG contradicted itself.** Its header claimed the anchors "have not moved since 0.1.0",
+  while the `0.2.0` entry two screens down records the synthetic IS anchor going **0.7588 → 0.4228**.
+  The header now separates the two things that are pinned: **real-data anchors** (unmoved since 0.1.0)
+  and **synthetic anchors** (moved once, deliberately, in 0.2.0), and each release says which it touched.
+- **`gridTz()`'s compromise value is now named.** When records carry several different timezones (or
+  none), SRI locks the whole window to `+8` — that `+8` is **a compromise, not a correct answer**, and
+  it was sitting in the code as a bare literal in two places. It is now `LOCK_TZ` with the reasoning
+  next to it: there is only one reference timezone to give, no mixed dataset has a right one, so the
+  lock is a written-down constant rather than a silent pick of the first timezone seen.
+
+### Tests
+
+- **123 → 124 assertions.** New contract test: **every mention of SRI's range, in `src/sri.js`,
+  `bin/sleepmetrics.js` and `README.md`, must say `−100~100`** — so the drift above cannot come back
+  as prose (it also asserts the range is actually *stated*, so the check can't pass by saying nothing).
+- ⚠️ **A pre-existing bug in the test suite itself, found while adding the above:** the
+  "every test file must actually run" self-check read `fs.fs.readFileSync` — `fs` is imported as a
+  **default** binding, so it has no `.fs` property and the check would have thrown had it ever reached
+  that branch. It was written to guard against orphan test files; it could not have caught one.
 
 ## [0.3.0] — 2026-10-15
 

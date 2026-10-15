@@ -61,7 +61,12 @@ import { DATE_MAX_SEC } from './records.js';
  *
  * 未显式给 `tz` 时**从记录推断**，而不是硬编码 `+8`：否则"一份全是 `tz:-5` 的数据忘了传 `tz`"
  * 会被静默挪 13 小时，而 SRI 照样给出一个像样的数字 —— 正是本项目最反对的失败。
- * 记录里 tz 不一致 ⇒ 退回 `+8`（任何单一时区都是妥协），并由 `auditRecords()` 的 `tz.mixed` 提示。
+ *
+ * ⚠️ **记录里 tz 不一致 ⇒ 锁到 `LOCK_TZ`（+8）**，并由 `auditRecords()` 的 `tz.mixed` 提示。
+ *   这个 +8 **不是"正确"的时区**，而是「**取哪个都是一种妥协**」时的显式妥协值：
+ *   全局只有一个参考时区可用，而混合数据里没有哪一个能被算作正确 ——
+ *   所以宁可锁定一个**写死的常量**，也不偷偷挑"第一个/最后一个看到的 tz"。
+ *   （想按某地当地时区看，就**显式传** `{tz}`；那是换一个参考，不是猜。）
  *
  * @param {Array<object>} records
  * @param {unknown} tz 显式参考时区；`null` / `undefined` ⇒ 从记录推断
@@ -76,10 +81,17 @@ function gridTz(records, tz, where) {
     //   不是时区，**不许**被拿来当参考时区 —— 它会平移每一个日界，而数字照出、量纲全错。
     //   这类值由 `normalize()`（抛出）或 `auditRecords()`（报 `tz.out-of-range`）负责报出来。
     if (isPlausibleTz(n)) seen.add(n);
-    if (seen.size > 1) return 8;
+    if (seen.size > 1) return LOCK_TZ;
   }
-  return seen.size === 1 ? [...seen][0] : 8;
+  return seen.size === 1 ? [...seen][0] : LOCK_TZ;
 }
+
+/**
+ * 推断出**多个不同**时区（跨时区混排）或**一个都没有**时的锁定值。
+ * ⚠️ 刻意是个**具名常量**而不是散在代码里的字面量 `8`：这处的 `8` 是「妥协」而不是「默认值」，
+ *    两者含义不同 —— 写成名字，读的人才会去问"为什么是它"。
+ */
+const LOCK_TZ = 8;
 
 /**
  * 建「每天一条 24h 睡/醒二值序列」（1=睡 0=醒）。

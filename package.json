@@ -1,6 +1,6 @@
 {
   "name": "sleepmetrics",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Standard sleep metrics in pure JavaScript: sleep regularity index (SRI) and circadian phase (MSFsc / social jetlag). Zero dependencies, no build step, no network, no filesystem.",
   "type": "module",
   "license": "MIT",

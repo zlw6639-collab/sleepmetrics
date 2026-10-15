@@ -46,6 +46,7 @@ audit 先跑它：脏数据**不会报错**，只会让指标给出看着正常�
    （Node 恒定输出 UTF-8 字节，是显示端按旧代码页解释才会花 —— 2026-10-13 实测确认。）
 
 ⚠️ 记录须是标准形状；本工具不认识任何厂商格式（那属于适配器）。
+   SRI 的取值范围是 −100~100（完全规律 = 100 · 与随机无法区分 = 0 · 比随机还糟为负）。
    SRI 与睡眠时长不相关（r=0.05）—— 别拿它当「睡得好不好」的替身。`;
 
 /** 当前小时；可用 SLEEPMETRICS_HOUR 覆盖（藏着的开关，不写进任何文档）。 */
@@ -387,7 +388,7 @@ if (args.cmd === 'audit') {
     const base = { schemaVersion: SCHEMA_VERSION, ...r, window: args.window ?? null, minDayMinutes: args.minDayMinutes };
     console.log(JSON.stringify(loo ? { ...base, influence: loo.out } : base, null, 2));
   } else {
-    console.log(`SRI            ${r.sri.toFixed(1)}   （完全规律 = 100，完全随机 = 0；与睡眠时长不相关）`);
+    console.log(`SRI            ${r.sri.toFixed(1)}   （取值范围 −100~100：完全规律 = 100、与随机无法区分 = 0、比随机还糟为负；与睡眠时长不相关）`);
     console.log(`窗口           ${r.from} ~ ${r.to}${args.window ? `（近 ${args.window} 晚）` : '（全量）'}`);
     console.log(`有效天 / 天对  ${r.days} 天 / ${r.pairs} 对`);
     if (r.skipped.length) console.log(`已剔除的天     ${r.skipped.join(' ')}（当天睡着 < ${args.minDayMinutes} 分钟）`);
