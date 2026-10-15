@@ -27,7 +27,7 @@ foreach ($f in $srcFiles) { node --check $f.FullName 2>&1 | Out-Null; if ($LASTE
 Check 'A1 语法门' ($syntaxBad.Count -eq 0) "$($srcFiles.Count) 个文件，失败 $(($syntaxBad -join ','))"
 
 # A2 全部测试
-$tests = @('time', 'records', 'sri', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'aside-guard', 'anchor-synthetic', 'regression')
+$tests = @('time', 'records', 'contract', 'sri', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'aside-guard', 'anchor-synthetic', 'regression')
 $testBad = @()
 foreach ($t in $tests) { node "test\$t.test.js" > $null 2>&1; if ($LASTEXITCODE -ne 0) { $testBad += $t } }
 Check 'A2 测试' ($testBad.Count -eq 0) "$($tests.Count) 个文件，失败 $(($testBad -join ','))"

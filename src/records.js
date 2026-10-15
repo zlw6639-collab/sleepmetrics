@@ -54,7 +54,37 @@
 import { dayOf } from './time.js';
 
 /**
- * 规范化：丢掉 bed/wake 非正的记录，补 `dur`，按 `bed` 升序。
+ * ★ 记录级字段校验的**唯一来源** —— `normalize()` 与 `auditRecords()` 必须共用它。
+ *
+ * 为什么单独抽出来（2026-10-15 复核外部评审报告后修）：两边原来各判一套，于是出现
+ * **「体检说 ok、规范化却丢掉记录」** —— 被丢的那条不会有任何 `error` 抬头。实测原行为：
+ *   · `{bed: 0, wake: 1000}` ⇒ audit 只给 info（还把它误诊成 `dur.too-long`）、`ok: true`，
+ *     而 `normalize()` 直接丢掉；
+ *   · `wake <= bed` ⇒ audit 报 error 但**仍把它算进 `summary.records`**，两边统计口径不同。
+ *
+ * 现在判据只有这一处：**能通过 `recordFaults()` 的记录，`normalize()` 一定收下；
+ * 被 `normalize()` 丢掉的，`auditRecords()` 一定能说出对应的 `ruleId`（severity 全是 `error`）。**
+ * 由 `test/contract.test.js` 钉住（含非空守卫，防止样本退化后假通过）。
+ *
+ * ⚠️ 刻意**不导出**到 `index.js`：这是模块间的内部契约，不是公共 API。
+ *
+ * @param {unknown} r 待判记录
+ * @returns {string[]} 触犯的规则标识（与 audit 的 `ruleId` 同名）；空数组 = 这条记录算数
+ */
+export function recordFaults(r) {
+  if (r === null || typeof r !== 'object') return ['record.not-object'];
+  const bed = Number(r.bed);
+  const wake = Number(r.wake);
+  if (!Number.isFinite(bed) || !Number.isFinite(wake)) return ['record.missing-time'];
+  const faults = [];
+  if (!(bed > 0)) faults.push('time.bed-not-positive');
+  if (!(wake > 0)) faults.push('time.wake-not-positive');
+  if (!(wake > bed)) faults.push('time.wake-not-after-bed');
+  return faults;
+}
+
+/**
+ * 规范化：丢掉 bed/wake 非正（等）的记录，补 `dur`，按 `bed` 升序。
  * @param {Record[]} records 标准记录数组
  * @param {number} [tz=8] 记录未带 tz 时的默认时区
  * @returns {NormalizedRecord[]} 新数组（不修改入参）
@@ -68,16 +98,23 @@ export function normalize(records, tz = 8) {
   if (!Array.isArray(records)) return [];
   const out = [];
   for (const r of records) {
-    if (r === null || typeof r !== 'object') continue;
+    // ★ 有效性判据**只此一处**（`recordFaults`；`auditRecords()` 用的是同一个函数）：
+    //   非对象 / bed·wake 非有限 / 非正 / wake 不晚于 bed ⇒ 丢掉。
+    //   2026-10-15 之前这里和 audit 各判一套 ⇒ `{bed:0,wake:1000}` 被体检放行（还误诊成
+    //   `dur.too-long`）却被这里丢掉，于是「体检说 ok、记录却少了一条」。
+    if (recordFaults(r).length) continue;
     // ⚠️ tz 必须校验：`'xx' * 3600` = NaN ⇒ `new Date(NaN).toISOString()` 抛 RangeError。
     //    非数字一律回退到调用方给的默认值 —— 拦在这一层，下游（sri / phase / audit）就不必各防一遍。
     const tzNum = Number(r.tz);
     const t = r.tz === undefined || r.tz === null || !Number.isFinite(tzNum) ? tz : tzNum;
     const bed = Number(r.bed);
     const wake = Number(r.wake);
-    if (!(bed > 0) || !(wake > 0)) continue;
-    const dur = r.dur !== undefined && r.dur !== null ? Number(r.dur) : Math.round((wake - bed) / 60);
-    if (!Number.isFinite(dur)) continue;
+    // ⚠️ `dur` 非数字 / 非正 ⇒ 视为「**未给**」，回退到推导值（2026-10-15 修）。
+    //    原来非有限值会让**整条记录**消失，而 audit 那边只是报个 warn 就继续 —— 两边不一致，
+    //    惩罚也过重：时间戳明明是好的，却因为一个字段脏就丢掉整段 8 小时睡眠。
+    //    `null` / `undefined` 语义不变，仍然是「未给」。
+    const given = r.dur === undefined || r.dur === null ? null : Number(r.dur);
+    const dur = given !== null && Number.isFinite(given) && given > 0 ? given : Math.round((wake - bed) / 60);
     // ⚠️ stages 必须**逐项**体检：`stages: [null]` 这种（外部评审实测 2026-10-14）会让下游直接崩，
     //    而它看起来只是「一条有点怪的数据」。这里**丢掉无效元素**（不崩），
     //    由 `auditRecords()` 负责把「有多少 stage 不可用」说出来 —— 脏数据要**可见**，但不必**致命**。

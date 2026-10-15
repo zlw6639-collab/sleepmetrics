@@ -22,6 +22,38 @@ All notable changes to this project are documented here. The format follows
   ⚠️ **Not in the published 0.1.1 tarball** — it landed after that release (npm has 23 files, the repo
   now has 24). It ships with the next version; this entry exists so that cannot be forgotten.
 
+### Fixed
+
+- **`auditRecords()` and `normalize()` now share a single record-validity rule** (`recordFaults()`,
+  exported from `src/records.js` for the two modules, deliberately **not** re-exported as public API).
+  They used to judge separately, with a consequence this library exists to prevent: the audit reported
+  `ok: true` for records that `normalize()` then **dropped silently** — `{bed: 0, wake: 1000}` was even
+  diagnosed as `dur.too-long`, i.e. the *wrong cause entirely*. The contract now is one sentence:
+  **every record `normalize()` drops produces an `error` from `auditRecords()`**, and
+  `summary.records` always equals the number of records `normalize()` keeps. New rules:
+  `time.bed-not-positive`, `time.wake-not-positive`. Pinned by `test/contract.test.js`, which carries a
+  **non-empty guard** so the invariant cannot pass on a degenerated sample.
+- **`dur <= 0` has its own rule** (`dur.non-positive`, warn) instead of being filed as "a short nap"
+  (`dur.too-short`, info) while `ok` stayed `true`. A negative duration is not *short*, it is
+  *impossible* — it needs its own name, not a softer synonym.
+- **A non-numeric or non-positive `dur` no longer deletes the whole record.** `normalize()` treats it as
+  "not given" and falls back to `(wake - bed) / 60`, which is what `auditRecords()` already did. A dirty
+  field used to cost an entire 8-hour sleep episode; now it costs one field. `null` keeps its existing
+  "not given" meaning (and is still not read as 0 minutes).
+- **`wake <= bed` records no longer enter the audit's counts** (`summary.records` / `days`) — the shared
+  rule drops them, exactly as `normalize()` always dropped them downstream. They are still reported, as
+  `time.wake-not-after-bed` (error); previously the audit counted them while `normalize()` discarded them.
+- **`npm test` never ran `test/contract.test.js`.** Both `npm test` and `scripts/verify-all.ps1` list
+  test files explicitly, and CI only runs `npm test` — so a new file is silently outside the gate, green
+  locally and non-existent in CI. Added a self-check asserting every `test/*.test.js` appears in
+  `npm test` (negative-tested: an orphan file turns it red).
+
+> **No numbers moved.** The real-data anchors **74.108 / 65.972 / 86.03** and the synthetic anchors are
+> bit-identical after this change. Measured before touching anything: across the 121-record real window,
+> **0 records** carried any of these defects — so the stricter rules change what happens to *invalid*
+> input, not to valid input. That is also why this is a patch-level fix rather than a minor bump: the
+> behaviour change is confined to records the library was already discarding.
+
 ## [0.1.1] — 2026-10-14
 
 ### Added

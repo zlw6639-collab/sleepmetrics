@@ -10,6 +10,7 @@
  *   · 不做"数据质量评分" —— 那会诱导人盯着一个分数，而不是去看具体哪条记录坏了。
  */
 import { dayOf } from './time.js';
+import { recordFaults } from './records.js';
 
 /** 短于这个时长的"睡眠段"多半是误录（也可能是真小睡，所以只算 info） */
 const PLAUSIBLE_MIN_MINUTES = 30;
@@ -23,6 +24,19 @@ const LONG_AWAKE_MINUTES = 120;
 const MILLISECOND_THRESHOLD = 1e11;
 /** 本库认识的 stages.state 编码 */
 const KNOWN_STATES = new Set([2, 3, 4, 5]);
+
+/**
+ * `recordFaults()` 的规则标识 → 人话。见 `records.js` 里那个共享判据。
+ * ⚠️ **全部是 `error`**：这些记录 `normalize()` 会直接丢掉 —— 体检若把它们标成 info / warn，
+ *    就成了「体检放行、规范化静默丢数据」（2026-10-15 修的正是这个）。
+ */
+const RECORD_FAULT = {
+  'record.not-object': '记录不是对象',
+  'record.missing-time': 'bed / wake 不是有效数字',
+  'time.bed-not-positive': 'bed 不是正数（本库要 epoch **秒**，且必须是 1970 之后的真实时刻）',
+  'time.wake-not-positive': 'wake 不是正数（同上）',
+  'time.wake-not-after-bed': 'wake 不晚于 bed',
+};
 
 /**
  * 体检出的一条问题。
@@ -78,25 +92,27 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
   let awakeStages = 0;
 
   records.forEach((r, index) => {
-    if (r === null || typeof r !== 'object') {
-      push('record.not-object', 'error', '记录不是对象', { index });
+    // ★ 有效性判据与 `normalize()` **共用同一个函数**（`recordFaults`，见 records.js 顶部）。
+    //   ⇒ 这里报 error 的记录，那边一定会被丢掉；反过来说，「audit 报 ok」就意味着
+    //     `normalize()` 一条都没少收。2026-10-15 之前两边各判一套，于是
+    //     `{bed:0,wake:1000}` 被放行（还被误诊成 `dur.too-long`）却被规范化丢弃。
+    //   ⇒ 这类记录**不进统计**：days / overlap / no-main-sleep 都不算它，与 normalize 的取舍一致。
+    const faults = recordFaults(r);
+    if (faults.length) {
+      for (const ruleId of faults) push(ruleId, 'error', RECORD_FAULT[ruleId], { index });
       return;
     }
     const bed = Number(r.bed);
     const wake = Number(r.wake);
-    if (!Number.isFinite(bed) || !Number.isFinite(wake)) {
-      push('record.missing-time', 'error', 'bed / wake 不是有效数字', { index });
-      return;
-    }
     if (bed >= MILLISECOND_THRESHOLD || wake >= MILLISECOND_THRESHOLD) {
       push('time.looks-like-milliseconds', 'error', 'bed / wake 像是**毫秒**（本库要 epoch 秒）', { index });
     }
-    if (wake <= bed) push('time.wake-not-after-bed', 'error', 'wake 不晚于 bed', { index });
 
     const derived = (wake - bed) / 60;
-    // dur 非数字时回退到 derived（下面会报 `dur.not-a-number`）—— 不让 NaN 往下游传播。
-    const durRaw = r.dur === undefined || r.dur === null ? Math.round(derived) : Number(r.dur);
-    const dur = Number.isFinite(durRaw) ? durRaw : Math.round(derived);
+    // dur 非数字 / 非正时回退到 derived（下面各有规则报出来）—— 不让 NaN / 负数往下游传播。
+    // ⚠️ 判据必须与 `normalize()` 里那一行**逐字一致**，否则又是「体检一种口径、规范化另一种」。
+    const givenDur = r.dur === undefined || r.dur === null ? null : Number(r.dur);
+    const dur = givenDur !== null && Number.isFinite(givenDur) && givenDur > 0 ? givenDur : Math.round(derived);
     // ⚠️ 关键区分（2026-10-13 实测修正）：`bed..wake` 是**卧床时长**（time in bed），
     //   而 `dur` 多半是**实际睡眠时长**（total sleep time）—— 两者**本来就不该相等**，
     //   差值是"入睡潜伏 + 夜间清醒"。所以只有 `dur` **超过**卧床时长才是真矛盾。
@@ -108,6 +124,11 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
         // 非数字必须**报出来**：原来的 `Number.isFinite(Number(r.dur))` 会把整段检查跳过
         // ⇒ `dur: 'abc'` 静默无报（2026-10-13 实测：issues = 0）。
         push('dur.not-a-number', 'warn', `dur=${JSON.stringify(r.dur)} 不是有效数字（本库要分钟数）`, { index });
+      } else if (given <= 0) {
+        // ★ 独立规则（2026-10-15 修）：原来 `dur: -20` 被当成「短于 30 分钟的小睡」报 info，
+        //   于是**数值合法性**的问题被一句「是小睡还是误录？」盖过去了，`ok` 还仍是 true。
+        //   负时长不是「短」，是**不可能** —— 它该有自己的名字。
+        push('dur.non-positive', 'warn', `dur=${given} 不是正数 —— 已按卧床时长 ${Math.round(derived)} 分钟计算（本库要分钟数，且必须为正）`, { index });
       } else if (given > derived + DUR_TOLERANCE_MINUTES) {
         push('dur.exceeds-time-in-bed', 'warn', `dur=${given} 分钟**超过**卧床时长 ${derived.toFixed(1)} 分钟 —— 两者必有一个不对`, { index });
       } else if (derived - given > LONG_AWAKE_MINUTES) {
