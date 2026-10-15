@@ -113,7 +113,7 @@
   <p class="foot">
     用 <a href="https://www.npmjs.com/package/sleepmetrics">sleepmetrics</a> 的
     <code>computeSRI()</code> 实时计算 · 20 晚、每晚 8 小时、两个入睡时刻交替 ·
-    <strong>全部是合成数据</strong>（这一页是公开的）· 口径见
+    <strong>全部是合成数据</strong>（这一页是公开的）<span id="srcline"></span> · 口径见
     <a href="https://github.com/zlw6639-collab/sleepmetrics">仓库</a> 的 <code>src/sri.js</code>
   </p>
 </main>
@@ -140,11 +140,29 @@ function buildNights(ampMin, ctrMin) {
   return recs;
 }
 
+const VERSION = '0.3.0';
+// 双源：esm.sh 是预构建 CDN（快），unpkg 直接供原始 ESM 源码（本库「发布物即源码」，所以它永远可用）。
+// 新版本刚发布时 esm.sh 可能还没构建完 —— 那时 unpkg 就是兜底，页面不会因此变成一块白板。
+const SOURCES = [
+  { name: 'esm.sh', url: `https://esm.sh/sleepmetrics@${VERSION}` },
+  { name: 'unpkg', url: `https://unpkg.com/sleepmetrics@${VERSION}/src/index.js` },
+];
+
 let lib = null;
-try {
-  lib = await import('https://esm.sh/sleepmetrics@0.3.0');
-} catch (e) {
+let sourceUsed = '';
+for (const s of SOURCES) {
+  try {
+    lib = await import(s.url);
+    sourceUsed = s.name;
+    break;
+  } catch (e) {
+    lib = null;
+  }
+}
+el('srcline').textContent = lib ? ` · 当前从 ${sourceUsed} 加载 sleepmetrics@${VERSION}` : '';
+if (!lib) {
   el('loaderr').style.display = 'block';
+  el('sri').textContent = '—';
 }
 
 function render() {
