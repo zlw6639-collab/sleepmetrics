@@ -31,7 +31,7 @@
  *   4. **窗口锚点只允许有一处** —— 见 `sriLastN()`。拿「当天最后一段睡眠」（往往是小睡）当锚，
  *      窗口会整体前移一天：同一个「近 7 晚」能算出两个值（实测 66.0 vs 61.0）。
  */
-import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec } from './time.js';
+import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec, resolveTz } from './time.js';
 // ⚠️ 时间戳可表示范围是**同一个判据**：`records.js` 用它决定「这条记录算不算数」，
 //    这里用它保证 `buildGrid()` 的标记循环不会挂死。⇒ 共享常量，别各写一份（两份会漂）。
 import { DATE_MAX_SEC } from './records.js';
@@ -46,6 +46,8 @@ import { DATE_MAX_SEC } from './records.js';
  */
 export function buildGrid(records, tz = 8) {
   if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（原来是 `records ?? []`，传数字会抛 not iterable）
+  // ★ **配置**不合法就抛（见 `time.js` 的 `resolveTz`）—— `buildGrid()` 是导出函数，可能被直接调用。
+  const tzUse = resolveTz(tz, 'buildGrid');
   const grid = new Map();
   const ensure = (ds) => {
     if (!grid.has(ds)) grid.set(ds, new Uint8Array(MIN_PER_DAY));
@@ -64,8 +66,8 @@ export function buildGrid(records, tz = 8) {
     if (Math.abs(from) > DATE_MAX_SEC || Math.abs(to) > DATE_MAX_SEC) return;
     if (to - from > SEC_PER_DAY) return;
     for (let t = Math.floor(from / 60) * 60; t < to; t += 60) {
-      const ds = dayOf(t, tz);
-      const idx = Math.floor((t - dayStartSec(ds, tz)) / 60);
+      const ds = dayOf(t, tzUse);
+      const idx = Math.floor((t - dayStartSec(ds, tzUse)) / 60);
       if (idx >= 0 && idx < MIN_PER_DAY) ensure(ds)[idx] = val;
     }
   };
@@ -108,7 +110,12 @@ export function buildGrid(records, tz = 8) {
  * @param {{minDayMinutes?: number, tz?: number}} [opts]
  * @returns {{days: string[], skipped: string[], dayPairs: Array<{a: string, b: string, same: number}>}}
  */
-function decompose(records, { minDayMinutes = 180, tz = 8 } = {}) {
+function decompose(records, opts = {}) {
+  // 显式 `null` 视同「未给」；tz 不合法就抛（见 `resolveTz`）。
+  // ★ **三个入口（`computeSRI` / `sriLastN` / `sriLeaveOneOut`）都只把 `opts` 原样传进来**，
+  //   所以校验放在这一处，它们自动受益 —— 判据只有一份，不会各写各的。
+  const { minDayMinutes = 180, tz: tzRaw = 8 } = opts ?? {};
+  const tz = resolveTz(tzRaw, 'computeSRI');
   const grid = buildGrid(records, tz);
   const asleepIn = (arr) => {
     let n = 0;

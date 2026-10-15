@@ -12,7 +12,7 @@
  *   · `isRest` 由调用方注入（见 `rest.js`）—— 库不认识日历。
  *   · 入睡点一律**圆周均值**（§十一 第 1 条），别退回算术平均（23:50 与 00:10 会平均成 12:00）。
  */
-import { MIN_PER_DAY, SEC_PER_DAY, avg, circMean, clockMin, dayOf, mod } from './time.js';
+import { MIN_PER_DAY, SEC_PER_DAY, avg, circMean, clockMin, dayOf, mod, resolveTz } from './time.js';
 import { dailyMain } from './records.js';
 import { DISCLAIMER } from './disclaimer.js';
 
@@ -56,13 +56,16 @@ export const normalizeNight = (m) => {
  * @returns {object} `{ bedtime, wakeTarget, tomorrow, reasons[], facts[], disclaimer }`；
  *                   缺主睡眠时返回 `{ insufficient: true, reason }`
  */
-export function suggest(records, {
-  now = Math.floor(Date.now() / 1000),
-  isRest = () => false,
-  targetMinutes = DEFAULT_TARGET_MINUTES,
-  latencyMinutes = DEFAULT_LATENCY_MINUTES,
-  tz = 8,
-} = {}) {
+export function suggest(records, opts = {}) {
+  // 显式 `null` 视同「未给」（默认参数 `= {}` 不覆盖 `null`）；tz 不合法就抛（见 `resolveTz`）。
+  const {
+    now = Math.floor(Date.now() / 1000),
+    isRest = () => false,
+    targetMinutes = DEFAULT_TARGET_MINUTES,
+    latencyMinutes = DEFAULT_LATENCY_MINUTES,
+    tz: tzRaw = 8,
+  } = opts ?? {};
+  const tz = resolveTz(tzRaw, 'suggest');
   const main = dailyMain(records, 180, tz);
   if (main.length === 0) {
     return { insufficient: true, reason: '没有主睡眠记录（>180 分钟），算不出建议', disclaimer: DISCLAIMER };
@@ -163,14 +166,16 @@ export function suggest(records, {
  * @param {number} [opts.saidToday] 今天已经提醒过几次
  * @returns {{allowed: boolean, ruleId: string, reason: string, deltaMinutes: number}}
  */
-export function nudgeDecision({
-  nowMinutes,
-  bedtimeMinutes,
-  saidToday = 0,
-  lateMinutes = LATE_MINUTES,
-  nightStartMinutes = NIGHT_START_MINUTES,
-  nightEndMinutes = NIGHT_END_MINUTES,
-} = {}) {
+export function nudgeDecision(opts = {}) {
+  // 显式 `null` 视同「未给」⇒ 各字段走默认值（`= {}` 默认参数不覆盖 `null`）。
+  const {
+    nowMinutes,
+    bedtimeMinutes,
+    saidToday = 0,
+    lateMinutes = LATE_MINUTES,
+    nightStartMinutes = NIGHT_START_MINUTES,
+    nightEndMinutes = NIGHT_END_MINUTES,
+  } = opts ?? {};
   const nowN = normalizeNight(nowMinutes);
   const bedN = normalizeNight(bedtimeMinutes);
   const deltaMinutes = nowN - bedN;

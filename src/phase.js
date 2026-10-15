@@ -27,7 +27,7 @@
  *    ⇒ **这是一条已知口径差，不是 bug** —— 拿别的数据集比对时要记得它。
  */
 import {
-  MIN_PER_DAY, SEC_PER_DAY, avg, circDiff, circMean, clockMin, dayOf, mod,
+  MIN_PER_DAY, SEC_PER_DAY, avg, circDiff, circMean, clockMin, dayOf, mod, resolveTz,
 } from './time.js';
 import { DISCLAIMER } from './disclaimer.js';
 
@@ -59,8 +59,12 @@ import { DISCLAIMER } from './disclaimer.js';
  * @param {{windowDays?: number, tz?: number}} [opts]
  * @returns {PhaseResult|null} 不足（缺工作日或缺休息日）时返回带 `insufficient: true` 的对象
  */
-export function computePhase(records, isRest, { windowDays = 30, tz = 8 } = {}) {
+export function computePhase(records, isRest, opts = {}) {
   if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（与 records.js 顶部那条规则一致）
+  // 显式 `null` 视同「未给」（默认参数 `= {}` 只覆盖 `undefined`，**不覆盖** `null`）；
+  // tz 不合法就抛 —— 见 `time.js` 的 `resolveTz`。下面函数体里的 `tz` 全部是**校验后**的值。
+  const { windowDays = 30, tz: tzRaw = 8 } = opts ?? {};
+  const tz = resolveTz(tzRaw, 'computePhase');
   const last = records.at(-1);
   if (!last) return null;
 
@@ -125,7 +129,9 @@ export const minToClock = (m) => {
  *   `labels`：长度必须 = `cuts.length + 1`；缺省用 `'1'…'n'`
  * @returns {{label: string, index: number, cuts: number[]}|null} 参数不合法返回 `null`（不猜）
  */
-export function chronotype(msfscMinutes, { cuts, labels } = {}) {
+export function chronotype(msfscMinutes, opts = {}) {
+  // 显式 `null` 视同「未给」⇒ `cuts` 为 `undefined` ⇒ 下面的守卫返回 `null`（不猜）。
+  const { cuts, labels } = opts ?? {};
   if (!Number.isFinite(msfscMinutes)) return null;
   if (!Array.isArray(cuts) || cuts.length === 0) return null;
   const monotonic = cuts.every((c, i) => Number.isFinite(c) && (i === 0 || c > cuts[i - 1]));
@@ -155,9 +161,11 @@ export function chronotype(msfscMinutes, { cuts, labels } = {}) {
  * @param {number} [opts.tolerance] 差几档以内算"一致"（默认 0）
  * @returns {object|null} 参数不合法返回 `null`（不猜）
  */
-export function compareChronotype({
-  activityIndex, questionnaireIndex, labels = null, tolerance = 0,
-} = {}) {
+export function compareChronotype(opts = {}) {
+  // 显式 `null` 视同「未给」⇒ 两个 index 为 `undefined` ⇒ 下面的守卫返回 `null`（不猜）。
+  const {
+    activityIndex, questionnaireIndex, labels = null, tolerance = 0,
+  } = opts ?? {};
   if (!Number.isInteger(activityIndex) || !Number.isInteger(questionnaireIndex)) return null;
   if (activityIndex < 0 || questionnaireIndex < 0) return null;
   const delta = activityIndex - questionnaireIndex;

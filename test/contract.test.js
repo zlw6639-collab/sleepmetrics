@@ -18,6 +18,10 @@ import fs from 'node:fs';
 import { auditRecords } from '../src/audit.js';
 import { normalize } from '../src/records.js';
 import { buildGrid } from '../src/sri.js';
+import {
+  computeSRI, sriLastN, sriLeaveOneOut, computeIS, computePhase, chronotype,
+  compareChronotype, suggest, nudgeDecision, dayOf,
+} from '../src/index.js';
 import * as fx from './fixtures/synthetic.mjs';
 
 const TZ = fx.TZ;
@@ -214,4 +218,66 @@ test('★ 闸门自检：每个 test/*.test.js 都必须出现在 `npm test` 里
     `这些测试文件不在 npm test 里：${missing.join(', ')} —— 加进 package.json 的 scripts.test`
     + '（以及 scripts/verify-all.ps1 的 $tests 列表）',
   );
+});
+
+/* ─────────── 公开入口的参数契约（配置 vs 数据）─────────── */
+
+/**
+ * 2026-10-15 复核：公开入口对**配置参数**的处理原来各写各的 ——
+ *   · `auditRecords(recs, null)` / `suggest(recs, null)` / `computeSRI(recs, null)` / `chronotype(v, null)`
+ *     全都抛 `TypeError`（默认参数 `= {}` 只覆盖 `undefined`，**不覆盖显式 `null`**）；
+ *   · `normalize(recs, 'xx')` / `computeSRI(recs, {tz: 'xx'})` 抛 `RangeError: Invalid time value`
+ *     （`'xx' * 3600` = NaN ⇒ `new Date(NaN).toISOString()`）。
+ *
+ * 两条契约，都刻意**与「数据不合法」的处理相反**：
+ *   ① **选项对象是 `null` / `undefined` ⇒ 视同「未给」**，用默认值。
+ *      先例：`dur: null` 已被 `auditRecords()` 当作「未给」，而不是 0 分钟。
+ *   ② **`tz` 不合法 ⇒ 抛 `TypeError`**，而不是静默回退。理由：`tz` 是**配置**不是数据 ——
+ *      数据不合法就返回 `null` / `[]`（不猜），但配置悄悄回退会**按另一个时区算**，
+ *      而差一个时区就可能在「跨午夜归哪一天」上差一天，**任何断言都看不见它**。
+ *      ⇒ 配置错误宁可可见地失败。
+ */
+
+test('★ 显式 null 的选项对象 ⇒ 视同「未给」，不抛（原来全是 TypeError）', () => {
+  const recs = [{ bed: k(1), wake: k(9) }];
+  assert.doesNotThrow(() => normalize(recs, null));
+  assert.doesNotThrow(() => auditRecords(recs, null));
+  assert.doesNotThrow(() => suggest(recs, null));
+  assert.doesNotThrow(() => computeSRI(recs, null));
+  assert.doesNotThrow(() => sriLastN(recs, recs, 7, null));
+  assert.doesNotThrow(() => sriLeaveOneOut(recs, recs, 7, null));
+  assert.doesNotThrow(() => computeIS([1, 2, 3, 4], null));
+  assert.doesNotThrow(() => computePhase(recs, () => false, null));
+  assert.doesNotThrow(() => chronotype(3, null));
+  assert.doesNotThrow(() => compareChronotype(null));
+  assert.doesNotThrow(() => nudgeDecision(null));
+  // 而且真的用了默认值 —— 不是「没抛就算过」
+  assert.equal(normalize(recs, null)[0].tz, 8);
+  assert.equal(auditRecords(recs, null).summary.records, 1);
+});
+
+test('★ tz 不合法 ⇒ 抛明确的 TypeError（配置错误必须可见，不许静默换个时区算）', () => {
+  const recs = [{ bed: k(1), wake: k(9) }];
+  for (const bad of ['xx', Number.NaN, Number.POSITIVE_INFINITY, {}]) {
+    const label = String(bad);
+    assert.throws(() => normalize(recs, bad), /tz 必须是有限数/, `normalize tz=${label}`);
+    assert.throws(() => buildGrid(recs, bad), /tz 必须是有限数/, `buildGrid tz=${label}`);
+    assert.throws(() => computeSRI(recs, { tz: bad }), /tz 必须是有限数/, `computeSRI tz=${label}`);
+    assert.throws(() => auditRecords(recs, { tz: bad }), /tz 必须是有限数/, `auditRecords tz=${label}`);
+    assert.throws(() => computePhase(recs, () => false, { tz: bad }), /tz 必须是有限数/, `computePhase tz=${label}`);
+    assert.throws(() => suggest(recs, { tz: bad }), /tz 必须是有限数/, `suggest tz=${label}`);
+    assert.throws(() => dayOf(0, bad), /tz 必须是有限数/, `dayOf tz=${label}`);
+  }
+});
+
+test('★ 合法 tz 不许被这次收紧误伤（0 / 负数 / 半小时时区 / 字符串数字都算数）', () => {
+  const recs = [{ bed: k(1), wake: k(9) }];
+  assert.equal(normalize(recs)[0].tz, 8);         // 省略 ⇒ 默认
+  assert.equal(normalize(recs, null)[0].tz, 8);   // null ⇒ 默认
+  assert.equal(normalize(recs, 0)[0].tz, 0);      // ⚠️ 0 是合法时区（UTC），不是「空值」
+  assert.equal(normalize(recs, -5)[0].tz, -5);
+  assert.equal(normalize(recs, 5.5)[0].tz, 5.5);  // 印度 (+5:30) / 尼泊尔 (+5:45) 那类偏移
+  assert.equal(normalize(recs, '8')[0].tz, 8);    // 字符串数字 —— 与「记录级 tz」同一口径
+  // 记录级 tz 不合法时**仍然回退**（那条路径有 `tz.not-a-number` 把它报出来，所以回退是可见的）
+  assert.equal(normalize([{ ...recs[0], tz: 'xx' }])[0].tz, 8);
 });

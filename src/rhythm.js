@@ -55,7 +55,9 @@ const isSeries = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => Numbe
  * @param {{perDay?: number}} [opts] `perDay` = 每天的点数（默认 1440 = 1 分钟粒度）
  * @returns {ISResult|null} 不足（非等间隔整数天 / 全零序列）时返回 `null`
  */
-export function computeIS(values, { perDay = 1440 } = {}) {
+export function computeIS(values, opts = {}) {
+  // 显式 `null` 视同「未给」⇒ 默认 `perDay`（`= {}` 默认参数只覆盖 `undefined`，不覆盖 `null`）。
+  const { perDay = 1440 } = opts ?? {};
   if (!isSeries(values)) return null;
   if (!Number.isInteger(perDay) || perDay < 2) return null;
   const n = values.length;

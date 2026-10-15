@@ -69,6 +69,28 @@ All notable changes to this project are documented here. The format follows
   spans 333 days"* — every value legal, the wrong cause named. `time.looks-like-milliseconds` is now
   emitted **first**. This is the same misdiagnosis class as `{bed: 0}` → `dur.too-long` above, and the
   existing test that pinned the millisecond rule caught it within one run.
+- **Public entry points now agree on how they treat *configuration* — which is the opposite of how they
+  treat *data*.** `normalize(recs, 'xx')` and `computeSRI(recs, {tz: 'xx'})` threw
+  `RangeError: Invalid time value` (`'xx' * 3600` → `NaN` → `new Date(NaN).toISOString()`), while
+  `auditRecords(recs, null)`, `suggest(recs, null)`, `computeSRI(recs, null)`, `chronotype(v, null)` and
+  six more threw `TypeError` — because a default parameter `= {}` covers `undefined` but **not an
+  explicit `null`**. Two rules now hold at every entry point:
+  - **an options object that is `null` / `undefined` means "not given"** ⇒ defaults apply. That is the
+    same meaning `dur: null` already had in `auditRecords()`.
+  - **an invalid `tz` throws a `TypeError` that names its caller** (`normalize: tz 必须是有限数…`),
+    because `tz` is *configuration*, not data. Invalid **data** still returns `null` / `[]` (the
+    existing "don't guess" rule); but a silently substituted timezone computes **a different day
+    boundary** — it moves a night across midnight and changes SRI's day-pairs, **and no assertion can
+    see it**. Configuration errors fail visibly instead.
+  One shared predicate backs all of it (`resolveTz()` in `src/time.js`, deliberately **not** public
+  API), including the low-level `dayOf` / `dayStartSec` / `clockMin`, which used to disagree with each
+  other (`dayOf` threw; the other two returned `NaN`). Fixed along the way: a function-level `tz` of
+  `'8'` was passed through **as a string**, so normalized records carried `tz: '8'` instead of `8`.
+  `0` is a valid timezone (UTC) and is still not treated as an empty value.
+  ⚠️ **Nothing changed for a *record-level* `tz`**: an invalid one still falls back to the default,
+  because that path reports the fallback via `tz.not-a-number` — so the fallback is *visible*. The two
+  paths differ on purpose, and both now say so in comments.
+  No numbers moved here either: valid calls never reach the new throw branches.
 
 > **No numbers moved.** After all of the above, the real-data anchors **74.108 / 65.972 / 86.03** and
 > the synthetic anchors are bit-identical. Measured before touching anything: across the 121-record

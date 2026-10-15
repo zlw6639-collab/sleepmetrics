@@ -9,7 +9,7 @@
  *   · **只报告，不修改** —— 怎么清洗是调用方的事（也符合"库不碰文件系统"的边界）；
  *   · 不做"数据质量评分" —— 那会诱导人盯着一个分数，而不是去看具体哪条记录坏了。
  */
-import { dayOf, SEC_PER_DAY } from './time.js';
+import { dayOf, SEC_PER_DAY, resolveTz } from './time.js';
 import { recordFaults } from './records.js';
 
 /** 短于这个时长的"睡眠段"多半是误录（也可能是真小睡，所以只算 info） */
@@ -73,7 +73,11 @@ const RECORD_FAULT = {
  * @param {{tz?: number, minMainMinutes?: number}} [opts]
  * @returns {AuditResult}
  */
-export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
+export function auditRecords(records, opts = {}) {
+  // 显式 `null` 视同「未给」；tz 不合法就抛（见 `time.js` 的 `resolveTz`）—— 体检工具尤其不能
+  // 对**配置**错误含糊：它的职责正是把沉默的错误变成可见的话。
+  const { tz: tzRaw = 8, minMainMinutes = 180 } = opts ?? {};
+  const tz = resolveTz(tzRaw, 'auditRecords');
   const issues = [];
   const push = (ruleId, severity, message, where = {}) => {
     issues.push({

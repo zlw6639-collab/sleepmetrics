@@ -32,28 +32,62 @@ export const mod = (x, m = MIN_PER_DAY) => ((x % m) + m) % m;
 export const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 
 /**
+ * ★ `tz` 参数的**唯一判据** —— 固定偏移小时数（**不是** IANA 时区，库不知道夏令时），必须是有限数。
+ *
+ * ⚠️ 不合法时**抛**，而不是回退默认值。这一点是刻意的，而且与「**数据**不合法」的处理**相反**：
+ *   · 数据不合法 ⇒ 返回 `null` / `[]`（不猜；见 `records.js` 顶部那条统一规则）；
+ *   · **配置**不合法 ⇒ 抛 `TypeError`。因为静默回退会**按另一个时区算**，而差一个时区就可能在
+ *     「跨午夜归哪一天」上差一天 —— 报告里的日期、SRI 的天对会跟着全变，**任何断言都看不见它**。
+ *     本项目最反对「悄悄给错」，所以这里选择**可见的失败**。
+ *
+ * `null` / `undefined` ⇒ 用 `fallback`（视同「未给」，与 `dur: null` 同一语义）。
+ * 字符串数字（`'8'`）接受，会 `Number()` 化 —— 与「**记录级** tz」的回退口径保持一致。
+ *
+ * ⚠️ **刻意不导出到 `index.js`**：这是模块间的内部契约，不是公共 API。
+ *
+ * @param {unknown} tz
+ * @param {string} where 调用点名字（出现在错误消息里，便于定位是谁收到的）
+ * @param {number} [fallback=8]
+ * @returns {number}
+ * @throws {TypeError} 不是有限数
+ */
+export function resolveTz(tz, where, fallback = 8) {
+  // 快路径：`dayOf()` 会在 `buildGrid()` 的标记循环里被每分钟调一次，别让它慢下来。
+  if (typeof tz === 'number' && Number.isFinite(tz)) return tz;
+  if (tz === null || tz === undefined) return fallback;
+  const n = Number(tz);
+  if (!Number.isFinite(n)) {
+    throw new TypeError(`${where}: tz 必须是有限数（固定偏移小时，如 8；收到 ${String(tz)}）`);
+  }
+  return n;
+}
+
+/**
  * epoch 秒 → 该时区下的自然日 'YYYY-MM-DD'。
  * @param {number} ts epoch 秒
  * @param {number} [tz=8] 时区偏移（小时）
+ * @throws {TypeError} `tz` 不是有限数（见 `resolveTz`）
  */
 export const dayOf = (ts, tz = 8) =>
-  new Date((ts + tz * 3600) * 1000).toISOString().slice(0, 10);
+  new Date((ts + resolveTz(tz, 'dayOf') * 3600) * 1000).toISOString().slice(0, 10);
 
 /**
  * 自然日 'YYYY-MM-DD' → 该日 00:00（该时区）的 epoch 秒。
  * @param {string} ds 日期串
  * @param {number} [tz=8] 时区偏移（小时）
+ * @throws {TypeError} `tz` 不是有限数
  */
 export const dayStartSec = (ds, tz = 8) =>
-  Date.parse(ds + 'T00:00:00Z') / 1000 - tz * 3600;
+  Date.parse(ds + 'T00:00:00Z') / 1000 - resolveTz(tz, 'dayStartSec') * 3600;
 
 /**
  * epoch 秒 → 当日「距 00:00 的分钟数」（0..1439）。
  * @param {number} ts epoch 秒
  * @param {number} [tz=8] 时区偏移（小时）
+ * @throws {TypeError} `tz` 不是有限数
  */
 export const clockMin = (ts, tz = 8) => {
-  const d = new Date((ts + tz * 3600) * 1000);
+  const d = new Date((ts + resolveTz(tz, 'clockMin') * 3600) * 1000);
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 };
 

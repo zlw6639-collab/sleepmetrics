@@ -51,7 +51,7 @@
  * @property {number} tz
  * @property {Stage[]|null} stages **无效元素已被过滤掉**；没有有效分段时为 `null`
  */
-import { dayOf, SEC_PER_DAY } from './time.js';
+import { dayOf, SEC_PER_DAY, resolveTz } from './time.js';
 
 /**
  * ★ 记录级字段校验的**唯一来源** —— `normalize()` 与 `auditRecords()` 必须共用它。
@@ -114,6 +114,9 @@ export function normalize(records, tz = 8) {
   //    返回对象或数值的函数（computeSRI / sriLastN / computePhase / computeIS / computeIV…）⇒ `null`。**
   //    `auditRecords()` 是例外 —— 它返回**诊断报告**，所以照旧给出 `input.not-array` 那条 error。
   if (!Array.isArray(records)) return [];
+  // ★ **函数级** tz 是**配置**：不合法就抛（见 `time.js` 的 `resolveTz`）—— 不许静默换个时区算。
+  //   `null` / `undefined` 视同「未给」⇒ 用默认值。
+  const tzDefault = resolveTz(tz, 'normalize');
   const out = [];
   for (const r of records) {
     // ★ 有效性判据**只此一处**（`recordFaults`；`auditRecords()` 用的是同一个函数）：
@@ -121,10 +124,11 @@ export function normalize(records, tz = 8) {
     //   2026-10-15 之前这里和 audit 各判一套 ⇒ `{bed:0,wake:1000}` 被体检放行（还误诊成
     //   `dur.too-long`）却被这里丢掉，于是「体检说 ok、记录却少了一条」。
     if (recordFaults(r).length) continue;
-    // ⚠️ tz 必须校验：`'xx' * 3600` = NaN ⇒ `new Date(NaN).toISOString()` 抛 RangeError。
-    //    非数字一律回退到调用方给的默认值 —— 拦在这一层，下游（sri / phase / audit）就不必各防一遍。
+    // ⚠️ **记录级** tz 的判据与函数级**刻意不同**：不合法 ⇒ **回退**到默认值，而不是抛。
+    //   差别是有依据的：这条路径上 `auditRecords()` 会用 `tz.not-a-number` 把回退**报出来**，
+    //   所以它是**可见**的；而函数级参数没有报告通道，静默回退就变成「悄悄给错」。
     const tzNum = Number(r.tz);
-    const t = r.tz === undefined || r.tz === null || !Number.isFinite(tzNum) ? tz : tzNum;
+    const t = r.tz === undefined || r.tz === null || !Number.isFinite(tzNum) ? tzDefault : tzNum;
     const bed = Number(r.bed);
     const wake = Number(r.wake);
     // ⚠️ `dur` 非数字 / 非正 ⇒ 视为「**未给**」，回退到推导值（2026-10-15 修）。
