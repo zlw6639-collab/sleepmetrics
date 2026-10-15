@@ -145,10 +145,15 @@ git commit -am "0.1.1: ..." ; git tag -a v0.1.1 -m "0.1.1" ; git push --follow-t
 npm publish
 ```
 
-> ⚠️ **On this machine, `git push` needs two extra flags** (measured 2026-10-15). Without them it fails
-> in a way that *looks* like a credential problem and is not:
+> ⚠️ **On this machine, `git push` needs the proxy flag** (measured 2026-10-15). Inside a *confined*
+> shell — an agent sandbox — it also needs a TLS-backend flag. Without either, it fails in a way that
+> *looks* like a credential problem and is not:
 >
 > ```powershell
+> # in a normal terminal: this is usually all you need
+> git -c http.proxy=http://127.0.0.1:10090 push origin main
+>
+> # inside a confined shell: add the backend — but expect the credential step to fail anyway (item 3)
 > git -c http.proxy=http://127.0.0.1:10090 -c http.sslBackend=openssl push origin main
 > ```
 >
@@ -158,8 +163,8 @@ npm publish
 >    over HTTPS — while `api.github.com` answers `200`. The Windows system proxy at `127.0.0.1:10090`
 >    works. (Read yours from `HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings` →
 >    `ProxyServer`. Command-line tools do **not** pick up the system proxy on their own.)
-> 2. **The `schannel` TLS backend cannot start here** —
->    `AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030e)`. `openssl` works.
+> 2. **The `schannel` TLS backend cannot start inside a confined shell** —
+>    `AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS (0x8009030e)`. `openssl` works there.
 > 3. **Git Credential Manager cannot run inside a confined shell**: it needs a named pipe, which the
 >    sandbox refuses (`sh: couldn't create signal pipe, Win32 error 5`). So the push itself has to run
 >    in a **normal terminal** — with the flags above, `git push` there (GCM intact, credentials already
