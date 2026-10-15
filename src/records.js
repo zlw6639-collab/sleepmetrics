@@ -51,7 +51,7 @@
  * @property {number} tz
  * @property {Stage[]|null} stages **无效元素已被过滤掉**；没有有效分段时为 `null`
  */
-import { dayOf } from './time.js';
+import { dayOf, SEC_PER_DAY } from './time.js';
 
 /**
  * ★ 记录级字段校验的**唯一来源** —— `normalize()` 与 `auditRecords()` 必须共用它。
@@ -71,6 +71,13 @@ import { dayOf } from './time.js';
  * @param {unknown} r 待判记录
  * @returns {string[]} 触犯的规则标识（与 audit 的 `ruleId` 同名）；空数组 = 这条记录算数
  */
+/**
+ * JS `Date` 能表示的毫秒上限（±8.64e15）换算成 epoch **秒** —— 超出它 `toISOString()` 会抛。
+ * ⚠️ `sri.js` 的 `buildGrid()` 也导入它：**同一个判据的两处落地**（一处判记录有效性，
+ *    一处保标记循环不挂死）。别在别处再写一份字面量 —— 两份会漂。
+ */
+export const DATE_MAX_SEC = 8.64e15 / 1000;
+
 export function recordFaults(r) {
   if (r === null || typeof r !== 'object') return ['record.not-object'];
   const bed = Number(r.bed);
@@ -79,7 +86,18 @@ export function recordFaults(r) {
   const faults = [];
   if (!(bed > 0)) faults.push('time.bed-not-positive');
   if (!(wake > 0)) faults.push('time.wake-not-positive');
-  if (!(wake > bed)) faults.push('time.wake-not-after-bed');
+  // ⚠️ **极端但有限**的时间戳比抛错更坏（2026-10-15 加）：`new Date(9e18).toISOString()` 抛
+  //    RangeError —— 那还看得见；而 `buildGrid()` 的标记循环迭代次数 ∝ 跨度 / 60，会**不返回**。
+  //    这里连同下面的跨度一起拦住，两类问题就都变成"有名字的 error"。
+  if (bed > DATE_MAX_SEC || wake > DATE_MAX_SEC) {
+    faults.push('time.not-representable');
+  } else if (!(wake > bed)) {
+    faults.push('time.wake-not-after-bed');
+  } else if (wake - bed > SEC_PER_DAY) {
+    // 一段跨过 24 小时的「睡眠」不存在。上限与 audit 既有的 `dur.too-long`（> 24h）同口径；
+    // 真实数据实测最长 9.57 h（窗口内 121 条）· 9.57 h（全量 284 条）· stage 最长 1.3 h。
+    faults.push('time.span-too-long');
+  }
   return faults;
 }
 

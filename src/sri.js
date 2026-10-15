@@ -32,6 +32,9 @@
  *      窗口会整体前移一天：同一个「近 7 晚」能算出两个值（实测 66.0 vs 61.0）。
  */
 import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec } from './time.js';
+// ⚠️ 时间戳可表示范围是**同一个判据**：`records.js` 用它决定「这条记录算不算数」，
+//    这里用它保证 `buildGrid()` 的标记循环不会挂死。⇒ 共享常量，别各写一份（两份会漂）。
+import { DATE_MAX_SEC } from './records.js';
 
 /**
  * 建「每天一条 24h 睡/醒二值序列」（1=睡 0=醒）。
@@ -49,6 +52,17 @@ export function buildGrid(records, tz = 8) {
     return grid.get(ds);
   };
   const mark = (from, to, val) => {
+    // ★ 守卫（2026-10-15）：下面这个循环的迭代次数 ∝ `(to − from) / 60`。
+    //   极端时间戳会让它**近乎永不返回** —— 实测 `wake = 6e8` 已要 6717 ms，
+    //   `wake = 9e15` 约 1.5e14 次 ⇒ 等同挂死。抛错还看得见，**挂死看不见**。
+    //   ⇒ 这里必须自己拦住：`buildGrid()` 是**导出函数**、可能被直接调用（不经过
+    //     `normalize()`），不能指望上游已经筛过。判据与 `records.js` 的 `recordFaults()`
+    //     保持一致：时间戳不可被 `Date` 表示 / 一段跨过一天 ⇒ 跳过。
+    //   （真实数据实测：最长一段 9.57 h、最长的 stage 1.3 h ⇒ 余量充足。）
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+    if (!(to > from)) return;
+    if (Math.abs(from) > DATE_MAX_SEC || Math.abs(to) > DATE_MAX_SEC) return;
+    if (to - from > SEC_PER_DAY) return;
     for (let t = Math.floor(from / 60) * 60; t < to; t += 60) {
       const ds = dayOf(t, tz);
       const idx = Math.floor((t - dayStartSec(ds, tz)) / 60);

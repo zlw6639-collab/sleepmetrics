@@ -9,7 +9,7 @@
  *   · **只报告，不修改** —— 怎么清洗是调用方的事（也符合"库不碰文件系统"的边界）；
  *   · 不做"数据质量评分" —— 那会诱导人盯着一个分数，而不是去看具体哪条记录坏了。
  */
-import { dayOf } from './time.js';
+import { dayOf, SEC_PER_DAY } from './time.js';
 import { recordFaults } from './records.js';
 
 /** 短于这个时长的"睡眠段"多半是误录（也可能是真小睡，所以只算 info） */
@@ -36,6 +36,8 @@ const RECORD_FAULT = {
   'time.bed-not-positive': 'bed 不是正数（本库要 epoch **秒**，且必须是 1970 之后的真实时刻）',
   'time.wake-not-positive': 'wake 不是正数（同上）',
   'time.wake-not-after-bed': 'wake 不晚于 bed',
+  'time.not-representable': 'bed / wake 超出 JS `Date` 能表示的范围（约 ±8.64e12 epoch 秒）—— 多半是单位或数值弄错了',
+  'time.span-too-long': '这一段跨过了 24 小时 —— 不存在这样的「一次睡眠」',
 };
 
 /**
@@ -97,15 +99,23 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
     //     `normalize()` 一条都没少收。2026-10-15 之前两边各判一套，于是
     //     `{bed:0,wake:1000}` 被放行（还被误诊成 `dur.too-long`）却被规范化丢弃。
     //   ⇒ 这类记录**不进统计**：days / overlap / no-main-sleep 都不算它，与 normalize 的取舍一致。
+    const isObj = r !== null && typeof r === 'object';
+    const bed = isObj ? Number(r.bed) : Number.NaN;
+    const wake = isObj ? Number(r.wake) : Number.NaN;
+
+    // ⚠️ **先报「像毫秒」**（2026-10-15）：它是**首要病因**，而且它会让下面 `recordFaults()` 的
+    //   跨度检查得出「这一段跨了 333 天」这种**次生**结论。先说病因、再说后果 —— 否则用户看到
+    //   「跨度过大」根本想不到是单位错了。
+    //   （同一类误诊：第 1 项修掉的 `{bed:0, wake:1000}` → 被说成 `dur.too-long`。两次都是
+    //     **新规则抢了旧规则的诊断**，所以顺序在这里是语义，不是风格。）
+    if (bed >= MILLISECOND_THRESHOLD || wake >= MILLISECOND_THRESHOLD) {
+      push('time.looks-like-milliseconds', 'error', 'bed / wake 像是**毫秒**（本库要 epoch 秒）', { index });
+    }
+
     const faults = recordFaults(r);
     if (faults.length) {
       for (const ruleId of faults) push(ruleId, 'error', RECORD_FAULT[ruleId], { index });
       return;
-    }
-    const bed = Number(r.bed);
-    const wake = Number(r.wake);
-    if (bed >= MILLISECOND_THRESHOLD || wake >= MILLISECOND_THRESHOLD) {
-      push('time.looks-like-milliseconds', 'error', 'bed / wake 像是**毫秒**（本库要 epoch 秒）', { index });
     }
 
     const derived = (wake - bed) / 60;
@@ -173,6 +183,11 @@ export function auditRecords(records, { tz = 8, minMainMinutes = 180 } = {}) {
           return;
         }
         if (e <= s) push('stages.end-not-after-start', 'warn', 'stage 的 end 不晚于 start', { index, stage });
+        // ⚠️ 2026-10-15 加：`buildGrid()` 会**跳过**跨度过大的 stage（否则它的标记循环会挂死），
+        //    所以这里必须把「跳过」说出来 —— 否则用户只会看到某天少了一段、不知道为什么。
+        if (e - s > SEC_PER_DAY) {
+          push('stages.span-too-long', 'warn', `stage 跨了约 ${Math.round((e - s) / 3600)} 小时 —— 单个分期段不该超过 24 小时（该段已被 SRI 网格跳过）`, { index, stage });
+        }
         if (!KNOWN_STATES.has(Number(st?.state))) {
           push('stages.unknown-state', 'warn', `state=${st?.state} 不在 2/3/4/5 内（本库只认这套编码）`, { index, stage });
         }

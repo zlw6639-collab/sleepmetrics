@@ -17,13 +17,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { auditRecords } from '../src/audit.js';
 import { normalize } from '../src/records.js';
+import { buildGrid } from '../src/sri.js';
 import * as fx from './fixtures/synthetic.mjs';
 
 const TZ = fx.TZ;
 const k = (h) => fx.at(fx.d(1), h);
 const rules = (r) => r.issues.map((x) => x.ruleId);
 
-/** 每一条都至少有一处不对；既有「该丢」的，也有「不该丢」的 */
+/** 每一条都至少有一处不对 —— **全是该被丢掉的**（`normalize()` 一条都不该收） */
 const DIRTY = [
   null,
   'not-an-object',
@@ -36,6 +37,8 @@ const DIRTY = [
   { bed: k(1), wake: 0 },
   { bed: k(9), wake: k(1) }, // wake 早于 bed
   { bed: k(1), wake: k(1) }, // wake == bed
+  { bed: k(1), wake: 9e15 }, // 超出 Date 可表示范围（JS Date 上限约 ±8.64e12 epoch 秒）
+  { bed: k(1), wake: k(1) + 2 * 86400 }, // 跨两天的「一段睡眠」不存在
 ];
 
 /* ─────────── 核心不变量 ─────────── */
@@ -129,6 +132,68 @@ test('干净数据：仍然零问题、ok = true、一条不少（收紧判据�
   assert.deepEqual(a.issues, []);
   assert.equal(a.summary.ok, true);
   assert.equal(a.summary.records, normalize(good, TZ).length);
+});
+
+/* ─────────── 极端时间戳：不许崩，更不许挂死 ─────────── */
+
+/**
+ * 2026-10-15 复核：极端但**有限**的时间戳是这个库里唯一「比抛错更坏」的输入 —— 它会**不返回**。
+ *   · `normalize()` / `auditRecords()`：`new Date(9e18).toISOString()` 抛 `RangeError`；
+ *   · `buildGrid()`：`mark()` 的循环 `for (t = …; t < to; t += 60)` 迭代次数 ∝ `(to − from) / 60`，
+ *     `wake = 6e8` 实测就要 **6717 ms**，`9e15` 约 **1.5e14 次** ⇒ 等同挂死。
+ * ⇒ 抛错还看得见，**挂死看不见** —— 这是本项目最反对的那种失败。
+ *
+ * 上限取 **24 小时**：真实数据实测最长 9.57 h（121 条）/ 9.57 h（全量 284 条），余量充足；
+ * 而且 `auditRecords()` 早就把「单段超过 24 小时」当不可能（`dur.too-long`），语义一致。
+ */
+
+test('★ normalize：极端时间戳不抛异常，按「无效记录」丢掉', () => {
+  let out;
+  assert.doesNotThrow(() => { out = normalize([{ bed: k(1), wake: 9e15 }], TZ); });
+  assert.deepEqual(out, []);
+});
+
+test('★ auditRecords：极端时间戳报 time.not-representable（原来它自己先抛 RangeError）', () => {
+  let a;
+  assert.doesNotThrow(() => { a = auditRecords([{ bed: k(1), wake: 9e15 }]); });
+  assert.equal(a.summary.ok, false);
+  assert.ok(rules(a).includes('time.not-representable'));
+});
+
+test('★ 跨度过大（> 24h）的段也是判据的一部分：audit 报 error、normalize 丢掉', () => {
+  const rec = { bed: k(1), wake: k(1) + 2 * 86400 };
+  assert.ok(rules(auditRecords([rec])).includes('time.span-too-long'));
+  assert.deepEqual(normalize([rec], TZ), []);
+});
+
+test('★ buildGrid：跨度过大的段直接跳过 —— 不许让循环跑到天荒地老', () => {
+  const t0 = Date.now();
+  const g = buildGrid([{ bed: 0, wake: 6e8 }]); // 修复前实测 6717 ms
+  const ms = Date.now() - t0;
+  assert.equal(g.size, 0, '这种段不该进网格');
+  assert.ok(ms < 500, `耗时 ${ms} ms —— 守卫没生效（修复前这个输入要跑约 6.7 秒）`);
+});
+
+test('★ buildGrid：不可表示的时间戳也跳过（它可能被直接调用，不能指望调用方先 normalize）', () => {
+  assert.equal(buildGrid([{ bed: 0, wake: 9e15 }]).size, 0);
+});
+
+test('★ buildGrid：正常记录仍然照常标记（守卫不许误伤）', () => {
+  const g = buildGrid([{ bed: k(1), wake: k(9), tz: TZ }], TZ);
+  assert.equal(g.size, 1);
+  const day = g.get([...g.keys()][0]);
+  let asleep = 0;
+  for (const v of day) if (v) asleep += 1;
+  assert.equal(asleep, 480, '01:00→09:00 应是 480 分钟');
+});
+
+test('★ auditRecords：单个 stage 跨度过大也要报出来（buildGrid 会跳过它 —— 不许静默）', () => {
+  const r = auditRecords([{
+    bed: k(1),
+    wake: k(9),
+    stages: [{ start: k(1), end: k(1) + 3 * 86400, state: 2 }], // 一个 stage 跨 3 天
+  }]);
+  assert.ok(rules(r).includes('stages.span-too-long'));
 });
 
 /* ─────────── 闸门自检：新测试文件不许变成孤儿 ─────────── */

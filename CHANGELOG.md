@@ -47,12 +47,35 @@ All notable changes to this project are documented here. The format follows
   test files explicitly, and CI only runs `npm test` — so a new file is silently outside the gate, green
   locally and non-existent in CI. Added a self-check asserting every `test/*.test.js` appears in
   `npm test` (negative-tested: an orphan file turns it red).
+  ⚠️ Found in the same session, same family: **`npm test` chains files with `&&`, so the first failing
+  file hides every file after it.** A run that reported "92 pass / 1 fail" had actually never executed
+  `anchor-synthetic` or `regression` — the anchors looked fine only because nothing checked them. Run
+  the files individually (as `scripts/verify-all.ps1` does) when you need the whole picture.
+- **Extreme-but-finite timestamps were the one input *worse* than an exception: they made the library
+  not come back.** `normalize()` / `auditRecords()` threw `RangeError: Invalid time value`
+  (`new Date(9e18).toISOString()`), and `buildGrid()`'s marking loop — `for (t = …; t < to; t += 60)`,
+  iterations ∝ span/60 — took **6717 ms for `wake = 6e8`** (building a 6945-day grid) and would need
+  roughly **1.5e14 iterations** for `9e15`. **An exception is visible; a hang is not.** Two rules now
+  turn both into *named* errors: `time.not-representable` (outside what `Date` can represent,
+  ±8.64e12 epoch seconds) and `time.span-too-long` (a single episode spanning over 24 h).
+  `buildGrid()` also guards itself, because it is **exported** and may be called directly with no
+  `normalize()` upstream. `stages.span-too-long` reports a stage wider than 24 h that the grid skips —
+  the skip is *stated*, not silent. The bound is **24 h**, matching the existing `dur.too-long`
+  semantics; real data measures 9.57 h max per record (121 in-window · 284 overall) and 1.3 h per
+  stage, so the margin is wide. The bound itself lives in **one** place (`DATE_MAX_SEC`, imported by
+  `sri.js` from `records.js`) — a second literal would drift, and one nearly did during this change.
+- **Diagnosis order is now part of the contract: report the cause before the consequence.** A
+  milliseconds-vs-seconds mistake inflates the span 1000×, and was being reported as *"this episode
+  spans 333 days"* — every value legal, the wrong cause named. `time.looks-like-milliseconds` is now
+  emitted **first**. This is the same misdiagnosis class as `{bed: 0}` → `dur.too-long` above, and the
+  existing test that pinned the millisecond rule caught it within one run.
 
-> **No numbers moved.** The real-data anchors **74.108 / 65.972 / 86.03** and the synthetic anchors are
-> bit-identical after this change. Measured before touching anything: across the 121-record real window,
-> **0 records** carried any of these defects — so the stricter rules change what happens to *invalid*
-> input, not to valid input. That is also why this is a patch-level fix rather than a minor bump: the
-> behaviour change is confined to records the library was already discarding.
+> **No numbers moved.** After all of the above, the real-data anchors **74.108 / 65.972 / 86.03** and
+> the synthetic anchors are bit-identical. Measured before touching anything: across the 121-record
+> real window **0 records** carried any of these defects, and the widest record spans 9.57 h — so the
+> stricter rules change what happens to *invalid* input, not to valid input. That is also why this is a
+> patch-level fix rather than a minor bump: the behaviour change is confined to records the library was
+> already discarding.
 
 ## [0.1.1] — 2026-10-14
 
