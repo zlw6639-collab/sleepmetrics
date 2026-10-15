@@ -48,3 +48,9 @@ jobs:
       # 最后看一眼：到底会发布哪些文件、多大
       - name: Packaging check
         run: npm pack --dry-run
+
+      # ★ 打包安装 smoke test —— 上面那步只列**文件名**，它不 import 任何东西。
+      #   "文件都在、一 import 就崩"（exports 映射写错、漏了 src 里被 import 的模块）只有
+      #   **真装一次**才知道。它会打 tarball、在干净目录装、从装好的包里 import 并算一条最小结果。
+      - name: Pack + install smoke test
+        run: npm run smoke

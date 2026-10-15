@@ -3,7 +3,7 @@
 # 用法：pwsh -File scripts\verify-all.ps1
 #
 # 覆盖三块：
-#   A 库侧   —— 语法门 / 全部测试 / 回归锚点 / 链接门 / 发布物内容 / CLI 契约 / 零依赖与无 IO / examples / R 交叉
+#   A 库侧   —— 语法门 / 全部测试 / 回归锚点 / 链接门 / 发布物内容 / CLI 契约 / 零依赖与无 IO / examples / R 交叉 / 打包安装 smoke
 #   B 本机侧 —— analyze / report / rhythm / datacheck / 催睡闸门
 #   C 仓库与文档 —— 文档两侧哈希一致 / git 干净且与远端同步 / 知识库入库
 #
@@ -86,6 +86,11 @@ if ($rscript -and (Test-Path $rec)) {
 } else {
   Check 'A9 R 交叉 (mctq)' $false 'Rscript 未找到或真实数据缺失'
 }
+
+# A10 打包安装 smoke test —— A5 只列**文件名**，它不 import 任何东西；
+#     "文件都在、一 import 就崩"（exports 映射写错、漏了 src 里被 import 的模块）只有**真装一次**才知道。
+node scripts\pack-smoke.mjs > $null 2>&1
+Check 'A10 打包安装 smoke' ($LASTEXITCODE -eq 0) 'tarball → 干净目录安装 → import → 算一条最小结果'
 Pop-Location
 
 Write-Host "=== B. 本机侧（mifit） ===" -ForegroundColor Cyan

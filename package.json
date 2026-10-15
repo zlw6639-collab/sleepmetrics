@@ -41,7 +41,8 @@
     "test:anchors": "node test/anchor-synthetic.test.js",
     "test:one": "node test/sri.test.js",
     "regression": "node test/regression.test.js",
-    "check:links": "node scripts/check-links.mjs"
+    "check:links": "node scripts/check-links.mjs",
+    "smoke": "node scripts/pack-smoke.mjs"
   },
   "keywords": [
     "sleep",

@@ -14,11 +14,12 @@ steps are portable.
 > ```powershell
 > pwsh -File scripts\verify-all.ps1
 > ```
-> It covers 18 items — syntax gate · all 12 test files · the regression anchors · README links ·
+> It covers 19 items — syntax gate · all 12 test files · the regression anchors · README links ·
 > published-tarball contents · the `--json` contract (key set must not change) · zero dependencies and
-> no IO imports in `src/` · both `examples/` scripts · the **R cross-check against `mctq`** · the local
-> `analyze` / `report` / `rhythm` / `datacheck` scripts and the nudge gate · doc-tree hash parity ·
-> git cleanliness and tag. Anything **FAIL** must be fixed or explained before publishing —
+> no IO imports in `src/` · both `examples/` scripts · the **R cross-check against `mctq`** ·
+> **a pack-and-install smoke test** (tarball → clean dir → install → import → compute a minimal result)
+> · the local `analyze` / `report` / `rhythm` / `datacheck` scripts and the nudge gate · doc-tree hash
+> parity · git cleanliness and tag. Anything **FAIL** must be fixed or explained before publishing —
 > the anchors are a hard gate, there is no "close enough".
 >
 > The steps below are the individual pieces, for when one item fails and you need to dig in.

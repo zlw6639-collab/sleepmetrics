@@ -21,6 +21,17 @@ All notable changes to this project are documented here. The format follows
   `Date.UTC(...) − offset` so the host timezone is never consulted.
   ⚠️ **Not in the published 0.1.1 tarball** — it landed after that release (npm has 23 files, the repo
   now has 24). It ships with the next version; this entry exists so that cannot be forgotten.
+- **`scripts/pack-smoke.mjs`** (`npm run smoke`) — packs the tarball, installs it into a clean temp
+  directory, imports the **installed** package and computes a minimal result. The packaging check in
+  `verify-all.ps1` only lists file *names*; it never imports anything, so "every file is present but
+  importing it crashes" (a wrong `exports` map, a module missing from `src/`) would sail straight
+  through it. This also runs in CI.
+  It asserts **existence before values** (are the exports actually functions? does the version read?),
+  and one of its assertions is that IS is *centred* — so a regression of the formula fix above cannot
+  reach a published tarball unnoticed.
+  ⚠️ Windows note: Node refuses to spawn `npm.cmd` directly (`spawnSync npm.cmd EINVAL`, hardened after
+  CVE-2024-27980) and `shell: true` triggers `DEP0190`, so the script goes through `cmd.exe`
+  explicitly with arguments kept in array form.
 
 ### Fixed
 
