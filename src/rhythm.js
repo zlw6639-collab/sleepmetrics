@@ -77,7 +77,12 @@ export function computeIS(values, opts = {}) {
     sumMeanSq += m * m;
   }
 
-  return { is: (n * sumMeanSq) / (perDay * sumSq), n, perDay, days };
+  const is = (n * sumMeanSq) / (perDay * sumSq);
+  // ⚠️ 输入元素**都有限**，不代表中间运算不溢出：`1e308` 一平方就是 `Infinity`，
+  //   于是 `Infinity / Infinity = NaN`。返回 `null` 而不是 `NaN` ——
+  //   "算不出来"必须**说出来**，不能给一个看着像数的东西（本库的招牌问题）。
+  if (!Number.isFinite(is)) return null;
+  return { is, n, perDay, days };
 }
 
 /**
@@ -105,5 +110,7 @@ export function computeIV(values) {
   }
   if (denominator === 0) return null; // 常数序列：无变异，比值无定义（不是 0，是"没意义"）
 
-  return { iv: (n * numerator) / ((n - 1) * denominator), n };
+  const iv = (n * numerator) / ((n - 1) * denominator);
+  if (!Number.isFinite(iv)) return null;   // 同 `computeIS`：中间运算溢出 ⇒ 返回 null，不返回 NaN
+  return { iv, n };
 }

@@ -66,6 +66,41 @@ const rest = makeRestJudge(holidaysTable)   // YOU read the JSON; the library ne
 computePhase(main, rest.isRest)             // { msw, msf, msfsc, sjl, ... }
 ```
 
+### Run it right now
+
+**No data required.** This builds eight synthetic nights and prints real output — save it as
+`example.mjs` and run `node example.mjs`:
+
+```js
+import { allSleep, mainSleep, computeSRI, sriLastN, auditRecords } from 'sleepmetrics'
+
+const tz = 8
+const day = (i) => Date.UTC(2026, 2, i) / 1000 - tz * 3600   // 2026-03-NN 00:00 local
+const records = Array.from({ length: 8 }, (_, i) => ({
+  bed:  day(i + 1) + 1 * 3600,
+  wake: day(i + 1) + 9 * 3600,
+  tz,
+}))
+
+const all  = allSleep(records)    // naps included — SRI uses this
+const main = mainSleep(records)   // main sleep only (>180 min) — phase uses this
+
+console.log(auditRecords(records).summary)
+console.log(computeSRI(all))
+console.log(sriLastN(all, main, 7).sri)
+```
+
+It prints (verified 2026-10-15):
+
+```
+{ records: 8, days: 8, daysWithoutMainSleep: 0, bySeverity: { error: 0, warn: 0, info: 0 }, ok: true }
+{ sri: 100, days: 8, pairs: 7, from: '2026-03-01', to: '2026-03-08', skipped: [] }
+100
+```
+
+Eight identical nights ⇒ **SRI = 100**. That is the sanity check worth seeing *before* you feed the
+library anything real — once this matches, swap in your own `records`.
+
 ## Input shape
 
 ```js
@@ -232,6 +267,18 @@ These are the places where a reasonable-looking rewrite silently produces wrong 
    (R, Python): convert to **local wall-clock minutes** first, because `as.Date()` in R slices days by
    `tzone` while this library slices by the offset you passed — two different defaults that both look
    fine until they disagree by a day.
+8. **SRI's day boundary is ONE reference timezone for the whole window** — and when you omit `tz` it is
+   **inferred from the records**, not assumed to be `+8`. SRI compares *the same clock minute, 24 h
+   apart*; if one day is cut in London and the next in Fiji, the same minute index is 12 h away and you
+   are no longer measuring SRI. Measured on exactly that trip — 01:00→09:00 local in **both** places,
+   but a 12 h jump in absolute time — per-record timezones give **SRI = 100.0** ("perfectly regular"),
+   while one reference zone gives **33.3 / 47.2 / 55.6** for `tz` = 0 / 8 / 12. To read a trip "in local
+   time", pass that zone explicitly: that is *choosing another reference*, not cutting per record.
+   ⚠️ **This is not the same "day" as `normalize()`'s `ds`**, and the difference is deliberate: `ds`
+   says *which wake-day a record belongs to* (each record's own timezone — correct), while the grid's
+   day boundary is *the axis you compare on* (uniform). A stream that mixes timezones falls back to
+   `+8` for the grid, and `auditRecords()` flags it (`tz.mixed`) so you can pick one explicitly.
+   → `contract.test.js`: *"跨时区旅行：SRI 不许接近满分 —— 那意味着网格按记录各切各的了"*
 
 ## Tests are the spec
 
@@ -255,7 +302,9 @@ SLEEPMETRICS_REAL_DATA=/path/to/records.json npm run regression
 
 ## Size and performance
 
-- **Published tarball: 47.6 kB** (115 kB unpacked, 19 files) — no build output, no dependencies.
+- **Published tarball: ~87 kB** (216 kB unpacked, 24 files) — no build output, no dependencies.
+  (2026-10-15, `npm pack --dry-run`. Re-measure before quoting a precise figure: this line ships
+  **inside** the tarball, so the number moves whenever the docs do.)
 - **Pure ESM with no Node-only APIs** (`fs` / `net` / `process` / `Buffer`) ⇒ it also runs in the browser.
 - Newest syntax used: `??`, `?.`, and a single `Array.prototype.at` ⇒ Node 16.6+ / browsers from 2022.
   `engines` says `>=20` on purpose (18 is EOL); it is a conservative floor, not a hard requirement.

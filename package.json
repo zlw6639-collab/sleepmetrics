@@ -37,7 +37,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node test/time.test.js && node test/records.test.js && node test/contract.test.js && node test/sri.test.js && node test/phase.test.js && node test/rest.test.js && node test/suggest.test.js && node test/audit.test.js && node test/rhythm.test.js && node test/aside-guard.test.js && node test/anchor-synthetic.test.js && node test/regression.test.js",
+    "test": "node scripts/test-all.mjs",
     "test:anchors": "node test/anchor-synthetic.test.js",
     "test:one": "node test/sri.test.js",
     "regression": "node test/regression.test.js",

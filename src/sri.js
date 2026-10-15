@@ -37,22 +37,58 @@ import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec, resolveTz } from './time.
 import { DATE_MAX_SEC } from './records.js';
 
 /**
+ * ★ SRI 网格的**参考时区** —— **整段窗口一个**，绝不按记录各用各的。
+ *
+ * 为什么（2026-10-15 实测，跨时区探针）：SRI 的比较单位是 `δ(s_{i,j}, s_{i+1,j})` ——
+ * **相隔 24 小时的同一钟点**。若第 i 天按伦敦切、第 i+1 天按斐济切，同一个 `j` 对应的绝对时刻
+ * 就相差 12 小时，**比较的已经不是 SRI 定义的那个东西了**。实测那种「每一地都是当地
+ * 01:00→09:00、但两晚之间跨了 12 小时时区」的数据：
+ *
+ *   每条记录各自 tz ⇒ **SRI = 100.0**（"完美规律"，荒谬 —— 他的绝对入睡时刻从 UTC 01:00 跳到 13:00）
+ *   单一参考 tz=0 / 8 / 12 ⇒ 33.3 / 47.2 / 55.6
+ *
+ * ⇒ 口径只有一种：**选一个参考时区，整段窗口都用它**。想按"当地时间"看，就把窗口内那个当地
+ *   时区**显式传进来**（`{tz: -5}`）—— 那是"换一个参考时区"，不是"每条各切各的"。
+ *
+ * ⚠️ 与 `normalize()` 的 `ds` 是**两回事**：那里的"每条记录自己的 tz"说的是「这条记录归哪个
+ *   醒来日」（描述这条记录，正确）；这里说的是「拿哪条时间轴去比较」（必须统一）。
+ *
+ * 未显式给 `tz` 时**从记录推断**，而不是硬编码 `+8`：否则"一份全是 `tz:-5` 的数据忘了传 `tz`"
+ * 会被静默挪 13 小时，而 SRI 照样给出一个像样的数字 —— 正是本项目最反对的失败。
+ * 记录里 tz 不一致 ⇒ 退回 `+8`（任何单一时区都是妥协），并由 `auditRecords()` 的 `tz.mixed` 提示。
+ *
+ * @param {Array<object>} records
+ * @param {unknown} tz 显式参考时区；`null` / `undefined` ⇒ 从记录推断
+ * @returns {number}
+ */
+function gridTz(records, tz, where) {
+  if (tz !== null && tz !== undefined) return resolveTz(tz, where);
+  const seen = new Set();
+  for (const r of records) {
+    const n = Number(r?.tz);
+    if (Number.isFinite(n)) seen.add(n);
+    if (seen.size > 1) return 8;
+  }
+  return seen.size === 1 ? [...seen][0] : 8;
+}
+
+/**
  * 建「每天一条 24h 睡/醒二值序列」（1=睡 0=醒）。
  * 睡眠时段按**真实时刻**落到对应自然日，跨午夜自动拆到两天。
- * 有 `stages` 就逐段标（state === 5 记「醒」）；没有就把整段按「睡」标（粗一点，但不丢天）。
+ * 有 `stages` 就逐段标（state === 5 记「醒」）；没有（或一段有效的都没有）就把整段按「睡」标。
  * @param {Array<object>} records 规范化后的记录（含 bed/wake/stages）
- * @param {number} [tz=8] 默认时区
+ * @param {number} [tz] 参考时区；缺省时**从记录的 `tz` 推断**（见 `gridTz` 的口径说明）
  * @returns {Map<string, Uint8Array>} 自然日 → 1440 长度序列
  */
-export function buildGrid(records, tz = 8) {
+export function buildGrid(records, tz) {
   if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（原来是 `records ?? []`，传数字会抛 not iterable）
-  // ★ **配置**不合法就抛（见 `time.js` 的 `resolveTz`）—— `buildGrid()` 是导出函数，可能被直接调用。
-  const tzUse = resolveTz(tz, 'buildGrid');
+  const tzUse = gridTz(records, tz, 'buildGrid');
   const grid = new Map();
   const ensure = (ds) => {
     if (!grid.has(ds)) grid.set(ds, new Uint8Array(MIN_PER_DAY));
     return grid.get(ds);
   };
+  /** 标记一段区间；`@returns {boolean}` 真标记了（`false` = 被下面的守卫跳过） */
   const mark = (from, to, val) => {
     // ★ 守卫（2026-10-15）：下面这个循环的迭代次数 ∝ `(to − from) / 60`。
     //   极端时间戳会让它**近乎永不返回** —— 实测 `wake = 6e8` 已要 6717 ms，
@@ -61,32 +97,37 @@ export function buildGrid(records, tz = 8) {
     //     `normalize()`），不能指望上游已经筛过。判据与 `records.js` 的 `recordFaults()`
     //     保持一致：时间戳不可被 `Date` 表示 / 一段跨过一天 ⇒ 跳过。
     //   （真实数据实测：最长一段 9.57 h、最长的 stage 1.3 h ⇒ 余量充足。）
-    if (!Number.isFinite(from) || !Number.isFinite(to)) return;
-    if (!(to > from)) return;
-    if (Math.abs(from) > DATE_MAX_SEC || Math.abs(to) > DATE_MAX_SEC) return;
-    if (to - from > SEC_PER_DAY) return;
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return false;
+    if (!(to > from)) return false;
+    if (Math.abs(from) > DATE_MAX_SEC || Math.abs(to) > DATE_MAX_SEC) return false;
+    if (to - from > SEC_PER_DAY) return false;
     for (let t = Math.floor(from / 60) * 60; t < to; t += 60) {
       const ds = dayOf(t, tzUse);
       const idx = Math.floor((t - dayStartSec(ds, tzUse)) / 60);
       if (idx >= 0 && idx < MIN_PER_DAY) ensure(ds)[idx] = val;
     }
+    return true;
   };
   for (const r of records ?? []) {
     // ⚠️ 数组里的 null / 非对象元素必须跳过：`null.stages` 会抛 TypeError，
     //    而「脏数据从不报错、只会静静给出错数字」正是本库的招牌（`audit.js` 开篇）。
     //    `normalize()` 一直有这道守卫，`buildGrid` 漏了 —— 2026-10-13 实测 `computeSRI([null])` 直接崩。
     if (r === null || typeof r !== 'object') continue;
+    let marked = false;
     if (r.stages && r.stages.length) {
       for (const st of r.stages) {
         // ⚠️ stages 里的脏元素（`null` / 非对象）也要跳过 —— 外部评审实测（2026-10-14）：
         //    `stages: [null]` 会让这里直接抛 TypeError。`normalize()` 现在会先过滤，
         //    但 `buildGrid()` 是导出函数、可能被直接调用 ⇒ 这一层也得守住。
         if (st === null || typeof st !== 'object') continue;
-        mark(Number(st.start), Number(st.end), Number(st.state) === 5 ? 0 : 1);
+        if (mark(Number(st.start), Number(st.end), Number(st.state) === 5 ? 0 : 1)) marked = true;
       }
-    } else {
-      mark(r.bed, r.wake, 1);
     }
+    // ★ 回退到整段（2026-10-15）：一个有效分期都没标上（`stages` 缺失 / 全是脏元素 / 被上面的
+    //   跨度守卫跳过）⇒ 按 `bed..wake` 标整段。原来只要 `stages.length > 0` 就**只走分期路径**，
+    //   于是 `stages: [null]` 这种记录被**直接调用**时网格是 0 天（整段睡眠静默消失），
+    //   而经 `normalize()` 进来的同一条记录会回退成整段（1 天）—— 同一个函数两个语义。
+    if (!marked) mark(r.bed, r.wake, 1);
   }
   return grid;
 }
@@ -114,8 +155,9 @@ function decompose(records, opts = {}) {
   // 显式 `null` 视同「未给」；tz 不合法就抛（见 `resolveTz`）。
   // ★ **三个入口（`computeSRI` / `sriLastN` / `sriLeaveOneOut`）都只把 `opts` 原样传进来**，
   //   所以校验放在这一处，它们自动受益 —— 判据只有一份，不会各写各的。
-  const { minDayMinutes = 180, tz: tzRaw = 8 } = opts ?? {};
-  const tz = resolveTz(tzRaw, 'computeSRI');
+  //   ⚠️ `tz` 缺省时**不写死 8**，交给 `gridTz()` 从记录推断（见那里的口径说明）。
+  const { minDayMinutes = 180, tz: tzRaw } = opts ?? {};
+  const tz = gridTz(records, tzRaw, 'computeSRI');
   const grid = buildGrid(records, tz);
   const asleepIn = (arr) => {
     let n = 0;

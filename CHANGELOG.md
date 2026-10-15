@@ -91,6 +91,40 @@ All notable changes to this project are documented here. The format follows
   because that path reports the fallback via `tz.not-a-number` — so the fallback is *visible*. The two
   paths differ on purpose, and both now say so in comments.
   No numbers moved here either: valid calls never reach the new throw branches.
+- **SRI's day boundary is now explicitly *one* reference timezone for the whole window — and it is
+  inferred from the records when not given.** SRI compares `δ(s_{i,j}, s_{i+1,j})`: *the same clock
+  minute, 24 h apart*. If day *i* is cut in London and day *i+1* in Fiji, the same `j` is 12 h off and
+  you are no longer measuring SRI. Measured on a trip that was 01:00→09:00 local in **both** places yet
+  jumped 12 h in absolute time: **per-record timezones give SRI = 100.0** ("perfectly regular"), while
+  one reference zone gives **33.3 / 47.2 / 55.6** for tz = 0 / 8 / 12. So: one zone for the window.
+  To read a trip "in local time", pass that zone explicitly — that is *choosing another reference*, not
+  cutting per record. The default also stopped being a hard-coded `+8`: a dataset that is entirely
+  `tz:-5` and forgets to pass `tz` used to be shifted 13 h **silently**, with SRI still returning a
+  plausible-looking number. Mixed timezones fall back to `+8`, and `auditRecords()` still flags them
+  (`tz.mixed`).
+  ⚠️ This is **not** the same "day" as `normalize()`'s `ds`, and the difference is deliberate: `ds` says
+  *which wake-day a record belongs to* (each record's own timezone — correct), while the grid's day
+  boundary is *the axis you compare on* (must be uniform). Both definitions now say so.
+- **`buildGrid()` no longer means two different things depending on how you call it.** With
+  `stages: [null]`, calling it **directly** produced a **0-day grid** (the whole episode vanished), while
+  the same record through `normalize()` produced a 1-day grid: `normalize()` filters invalid stages to
+  `null` so the grid fell back to `bed..wake`, whereas a non-empty `stages` array took the staging path
+  and marked nothing. It now falls back to the whole episode whenever **no** stage was marked. Pinned by
+  a test asserting both paths mark the same 480 minutes.
+- **`computeIS()` / `computeIV()` return `null` instead of `NaN` on overflow.** Finite inputs are not
+  enough: `1e308` squared is `Infinity`, and `Infinity / Infinity` is `NaN` — a value that looks like a
+  number. Both now check the result with `Number.isFinite()` and say "cannot compute" instead.
+- **`npm test` no longer stops at the first failing file.** It chained files with `&&`, so a failure
+  early in the list meant everything after it **never ran** — observed live: a run reporting
+  "92 pass / 1 fail" had never executed `anchor-synthetic` or `regression`, so the anchors looked fine
+  only because nothing checked them. `scripts/test-all.mjs` runs every file, prints the total, and exits
+  non-zero if any failed. It also **discovers** `test/*.test.js` rather than listing them, so a new file
+  cannot silently stay outside the gate (the self-check in `test/contract.test.js` now recognises both
+  arrangements).
+- **README**: the size line claimed 47.6 kB / 115 kB / 19 files; it is **85.3 kB / 210.6 kB / 24 files**
+  (measured 2026-10-15, with a note to re-measure). Added a **Run it right now** section — eight
+  synthetic nights, copy-paste, with the verified output printed beside it — because the old Quick start
+  referenced `records` and `holidaysTable` without defining either.
 
 > **No numbers moved.** After all of the above, the real-data anchors **74.108 / 65.972 / 86.03** and
 > the synthetic anchors are bit-identical. Measured before touching anything: across the 121-record

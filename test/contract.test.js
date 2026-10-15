@@ -19,7 +19,7 @@ import { auditRecords } from '../src/audit.js';
 import { normalize } from '../src/records.js';
 import { buildGrid } from '../src/sri.js';
 import {
-  computeSRI, sriLastN, sriLeaveOneOut, computeIS, computePhase, chronotype,
+  computeSRI, sriLastN, sriLeaveOneOut, computeIS, computeIV, computePhase, chronotype,
   compareChronotype, suggest, nudgeDecision, dayOf,
 } from '../src/index.js';
 import * as fx from './fixtures/synthetic.mjs';
@@ -209,9 +209,15 @@ test('★ auditRecords：单个 stage 跨度过大也要报出来（buildGrid �
  *
  * ⇒ 这条自检把「新文件必须进列表」变成会失败的断言。它自己也受同一条约束（自举）。
  */
-test('★ 闸门自检：每个 test/*.test.js 都必须出现在 `npm test` 里（否则 CI 不会跑它，写了等于没写）', () => {
+test('★ 闸门自检：每个 test/*.test.js 都会被 `npm test` 跑到（否则 CI 不会跑它，写了等于没写）', () => {
   const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const files = fs.readdirSync(new URL('./', import.meta.url)).filter((f) => f.endsWith('.test.js'));
+  // `npm test` 现在跑 `scripts/test-all.mjs`，它**自动发现**测试文件 ⇒ 天生没有孤儿。
+  // 万一有人把它改回显式列举，下面那条检查立刻恢复作用。
+  if (pkg.scripts.test.includes('test-all')) {
+    assert.ok(files.length > 0, '一个测试文件都没发现 —— 先怀疑尺子（路径或后缀）');
+    return;
+  }
   const missing = files.filter((f) => !pkg.scripts.test.includes(f));
   assert.deepEqual(
     missing, [],
@@ -280,4 +286,68 @@ test('★ 合法 tz 不许被这次收紧误伤（0 / 负数 / 半小时时区 /
   assert.equal(normalize(recs, '8')[0].tz, 8);    // 字符串数字 —— 与「记录级 tz」同一口径
   // 记录级 tz 不合法时**仍然回退**（那条路径有 `tz.not-a-number` 把它报出来，所以回退是可见的）
   assert.equal(normalize([{ ...recs[0], tz: 'xx' }])[0].tz, 8);
+});
+
+/* ─────────── SRI 的日界线：整段一个参考时区 ─────────── */
+
+/** 当地某日 `h` 点 → epoch 秒（写测试时手算跨时区用例用） */
+const localAt = (tz, h, ds) => Date.parse(`${ds}T00:00:00Z`) / 1000 - tz * 3600 + h * 3600;
+
+test('★ SRI 网格：`tz` 缺省时从记录推断（不写死 +8）—— 否则全是 +12 的数据会被静默挪 12 小时', () => {
+  const fiji = [
+    { bed: localAt(12, 1, '2026-03-01'), wake: localAt(12, 9, '2026-03-01'), tz: 12 },
+    { bed: localAt(12, 1, '2026-03-02'), wake: localAt(12, 9, '2026-03-02'), tz: 12 },
+  ];
+  assert.equal(
+    computeSRI(fiji).sri,
+    computeSRI(fiji, { tz: 12 }).sri,
+    '不传 tz 必须等价于传「记录里那个 tz」',
+  );
+  assert.notEqual(computeSRI(fiji).sri, computeSRI(fiji, { tz: 8 }).sri, '推断若失效，它会用 +8 切日');
+});
+
+test('★ 跨时区旅行：SRI 不许接近满分 —— 那意味着网格按记录各切各的了', () => {
+  // 头两晚伦敦（tz=0）、后两晚斐济（tz=+12），**每一地当地都是 01:00→09:00**。
+  // ⚠️ 这是反面教材的守卫：按记录各切各的会得到 **100.0**（"完美规律"），
+  //    而他实际的绝对入睡时刻从 UTC 01:00 跳到了 UTC 13:00 —— 跨了 12 小时。
+  //    SRI 的比较单位是「相隔 24h 的同一钟点」，各切各的就把这个前提破坏了。
+  const trip = [
+    { bed: localAt(0, 1, '2026-03-01'), wake: localAt(0, 9, '2026-03-01'), tz: 0 },
+    { bed: localAt(0, 1, '2026-03-02'), wake: localAt(0, 9, '2026-03-02'), tz: 0 },
+    { bed: localAt(12, 1, '2026-03-03'), wake: localAt(12, 9, '2026-03-03'), tz: 12 },
+    { bed: localAt(12, 1, '2026-03-04'), wake: localAt(12, 9, '2026-03-04'), tz: 12 },
+  ];
+  const r = computeSRI(trip);
+  assert.ok(r.sri !== null, '应当算得出来（有 3~4 个有效天）');
+  assert.ok(r.sri < 90, `实际 ${r.sri} —— 接近 100 就说明网格按记录各切各的了`);
+});
+
+/* ─────────── 同一个函数不许有两个语义（B2）─────────── */
+
+test('★ buildGrid：分期全无效时回退到整段 —— 直接调用与经 normalize() 必须同语义', () => {
+  const withBadStages = [{ bed: k(1), wake: k(9), stages: [null] }];
+  const direct = buildGrid(withBadStages);
+  const viaNormalize = buildGrid(normalize(withBadStages, TZ), TZ);
+  const asleep = (g) => {
+    let n = 0;
+    for (const a of g.values()) for (const v of a) if (v) n += 1;
+    return n;
+  };
+  assert.equal(direct.size, 1, '直接调用不该把整段睡眠静默丢掉（原来这里是 0 天）');
+  assert.equal(viaNormalize.size, 1);
+  assert.equal(asleep(direct), asleep(viaNormalize), '两条路径必须标记同样多的分钟');
+  assert.equal(asleep(direct), 480);
+});
+
+/* ─────────── IS / IV：有限输入不许产出 NaN（A4）─────────── */
+
+test('★ IS / IV：极端但有限的输入 ⇒ null（原来返回 NaN —— 一个看着像数的东西）', () => {
+  assert.equal(computeIS([1e308, -1e308, 1e308, -1e308], { perDay: 2 }), null);
+  assert.equal(computeIS([1e200, 1e200, 1e200, 1e200], { perDay: 2 }), null);
+  assert.equal(computeIV([1e308, -1e308, 1e308]), null);
+  // 正常输入不许被这次收紧误伤
+  const ok = computeIS([1, 2, 3, 4], { perDay: 2 });
+  assert.ok(ok !== null && Number.isFinite(ok.is), '正常序列仍要算得出来');
+  const okIv = computeIV([1, 2, 3]);
+  assert.ok(okIv !== null && Number.isFinite(okIv.iv));
 });
