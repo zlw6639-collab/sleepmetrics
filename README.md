@@ -147,6 +147,7 @@ changes on its own schedule.
 |---|---|
 | `allSleep(records)` | normalized episodes, `dur > 0`, sorted by bedtime (naps included) |
 | `mainSleep(records, minMinutes = 180)` | episodes with `dur > minMinutes` (strictly greater) |
+| `dailyMain(records, minMinutes = 180)` | **the longest episode per wake-day** — a *second* main-sleep convention, deliberately different from `mainSleep()`: this one de-duplicates per day and uses `>=`; `mainSleep()` keeps every qualifying episode and uses `>`. `suggest()` follows this one, phase follows `mainSleep()`. The difference is pinned by `test/records.test.js` — **do not "unify" them** |
 | `computeSRI(records, { minDayMinutes = 180, tz })` | `{ sri, days, pairs, from, to, skipped }` |
 | `sriLastN(allSegs, mainSegs, w, opts)` | windowed SRI; `w` falsy = all-time |
 | `sriLeaveOneOut(allSegs, mainSegs, w, opts)` | 逐日影响度 — `{ sri, days, pairs, out: [{ date, sri, delta, pairs, isolated }] }`。**只在小窗口上有诊断力**：一晚在 n=7 时值 ±11 分，在 n=85 时不到 ±1 分。`delta > 0` = 去掉它 SRI 反而升 = 它拖后腿 |
@@ -157,8 +158,22 @@ changes on its own schedule.
 | `compareChronotype({ activityIndex, questionnaireIndex, labels, tolerance })` | 双口径对比（**行为 vs 问卷**）—— **不实现任何量表**；不一致是常态，输出带免责 |
 | `circStats(mins)` | `{ n, mean, sd, R }` —— 圆周均值 / 圆周标准差 / 集中度 |
 | `computeIS(values, { perDay })` · `computeIV(values)` | 日间稳定性 / 日内变异性（van Someren 1999）—— ⚠️ **定义在 activity counts 上**：喂真的 counts 得到可比形式，喂睡/醒二值序列得到的是**退化形式**，两者**不可互相比较** |
+| `suggest(records, { now, isRest, targetMinutes, latencyMinutes, tz })` | tonight's bedtime, with **every reason and the numbers behind it**; `{ insufficient: true, reason }` when there is no main sleep |
+| `nudgeDecision({ nowMinutes, bedtimeMinutes, saidToday, ... })` | the "should tonight's reminder fire" predicate. **Pure and stateless** — remembering "already said today" is *yours* (this project writes it to a local file) |
 | `circMean / circDiff / dayOf / dayStartSec / clockMin` | time helpers |
 | `minToClock(minutes)` | `'23:50'` style formatting |
+| `normalize(records, tz)` · `buildGrid(records, tz)` | the normalizer, and the per-day 24 h grid the metric functions are built on — exported for inspection |
+| `dowOf(ds)` · `isWeekend(ds)` · `mod(x, m)` · `avg(a)` · `normalizeNight(m)` · `SEC_PER_DAY` · `MIN_PER_DAY` | lower-level helpers and constants |
+| `DEFAULT_TARGET_MINUTES` · `DEFAULT_LATENCY_MINUTES` · `NIGHT_START_MINUTES` · `NIGHT_END_MINUTES` · `LATE_MINUTES` | the defaults `suggest()` / `nudgeDecision()` use — override them per call |
+| `DISCLAIMER` | the disclaimer string every advisory return value carries — **pass it through to your user** |
+
+> **Stability, stated honestly:** the rows above the helpers are the API. The last three rows are
+> *exported internals* — handy to reuse, but they may change in a minor release without ceremony.
+
+> **A note on the source comments.** Many of them cite a `设计笔记 §N` ("design notes") — an internal
+> document that is **not shipped with this package**. Every such citation is immediately followed by the
+> rule it refers to, so nothing in the code requires looking it up. Citations to files that *are* shipped
+> (`NON-GOALS.md` §5, `README §Semantics`, …) resolve normally.
 
 > **Before trusting any number, run `auditRecords()`.** Dirty data never throws — it just produces
 > plausible-looking wrong numbers (a millisecond timestamp, an overlapping episode, a duration that

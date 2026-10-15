@@ -10,10 +10,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.2.0] — 2026-10-15
 
-> **This release moves one number on purpose.** The synthetic IS anchor goes 0.7588 → 0.4228 because
-> `computeIS()` was missing the overall-mean centring — see the IS entry under *Fixed*. Under
-> `RELEASE.md` §2 that makes it a **minor** bump, not a patch. The real-data anchors
-> **74.108 / 65.972 / 86.03** are unchanged, and so are the synthetic SRI / phase anchors.
+> **Two changes in this release can move a number — both deliberate.**
+>
+> 1. **`computeIS()` was missing the overall-mean centring** (see the IS entry under *Fixed*). It affects
+>    **every** IS value; the synthetic anchor goes 0.7588 → 0.4228. IV is untouched.
+> 2. **The SRI grid timezone is now inferred from the records** when `tz` is not passed (see the SRI entry
+>    under *Fixed*). This moves a number **only if** your records carry a `tz` other than `+8` **and** you
+>    were relying on the old hard-coded `+8` — then SRI snaps to the correct day boundary. Pass `tz`
+>    explicitly and nothing changes.
+>
+> Under `RELEASE.md` §2 either one makes this a **minor** bump, not a patch. The real-data anchors
+> **74.108 / 65.972 / 86.03** and the synthetic SRI / phase anchors are unchanged.
 > It also carries `TIMESTAMPS.md`, which missed the 0.1.1 tarball.
 
 ### Added
@@ -162,11 +169,13 @@ All notable changes to this project are documented here. The format follows
   affected. ⚠️ **Per `RELEASE.md` §2 this is a minor bump, not a patch** — any change that moves a
   number is.
 
-> **Numbers.** Everything above left the real-data anchors **74.108 / 65.972 / 86.03** and the synthetic
-> SRI / phase anchors bit-identical — measured before touching anything: across the 121-record real
-> window **0 records** carried those defects, and the widest record spans 9.57 h. **One number did
-> move**: the synthetic IS anchor, 0.7588 → 0.4228, because the formula itself was wrong. That is why
-> the IS entry is the only one above flagged as numbers-moving, and why it is a minor bump.
+> **Numbers.** The real-data anchors **74.108 / 65.972 / 86.03** and the synthetic SRI / phase anchors
+> are bit-identical to 0.1.1 — measured before touching anything: across the 121-record real window
+> **0 records** carried those defects, and the widest record spans 9.57 h. **Two changes can move a
+> number, and both are deliberate**: the **IS** formula (0.7588 → 0.4228, affecting every IS value) and
+> the **SRI grid timezone** now being inferred from the records instead of assumed `+8` (affecting only
+> datasets whose `tz` is not `+8` *and* which relied on that default). Either one makes this a minor
+> bump — see the note at the top of this release.
 
 ## [0.1.1] — 2026-10-14
 

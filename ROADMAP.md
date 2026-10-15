@@ -43,11 +43,6 @@ and the last section lists what will **not** happen.
       **time adjacency** (a fragment that touches its neighbour) rather than on length. Any threshold
       must be validated against real data for false positives — and real data never ships
       (`test/fixtures/synthetic.mjs` only).
-- [ ] **A single-page browser demo (GitHub Pages).** The library is zero-dependency ESM and touches
-      neither fs nor network, so it runs in a browser straight from a CDN (see *CDN / no-install
-      usage* in the README).
-      ⚠️ **Never demo with real sleep data** — synthetic fixtures only. The page is public, and the
-      `.gitignore` treating `raw/` as radioactive applies to anything derived from it too.
 - [ ] **Adapters** — generic JSON → CSV first; vendor formats only when somebody actually asks.
 - [ ] **A "write your own adapter with a local AI" prompt template** (2026-10-14).
       Vendor exports are frequently **gigabytes** — far too large to paste into a web chat — while a
@@ -155,6 +150,13 @@ and the last section lists what will **not** happen.
       Rate limits are split into **verified** (ntfy.sh: 60-message burst then 1 per 5 s, messages cached
       12 h; Slack: ~1 msg/s per channel, 16 KB hard limit, 429 + `Retry-After`) and an explicit
       **not-verified** list, because quoting an unread limit is how a pipeline truncates silently.
+- [x] **Interactive teaching page + GitHub Pages** (2026-10-15) — `docs/index.html`, deployed by
+      `.github/workflows/pages.yml`. Two sliders (*centre* and *amplitude*) recompute SRI live, because
+      *"average bedtime and regularity are different axes"* is something you have to **watch**: move the
+      centre slider and the average moves while SRI holds; move the amplitude slider and the average
+      holds while SRI falls. It imports the real library from a CDN (zero build) and uses **synthetic
+      data only** (the page is public) — with **computed** values throughout; the hand-drawn prototype
+      it came from had one of its five points off by 0.32.
 
 ## Later / on demand
 
@@ -182,13 +184,6 @@ and the last section lists what will **not** happen.
 - **Regularity × duration quadrant plot.** One point per week (x = mean duration, y = SRI) makes
   *"slept enough but irregularly"* vs *"regular but too short"* visible at a glance; ASCII suffices.
   Same family as the bedtime heatmap, different question.
-- **Interactive teaching page** — the existing "single-page demo" item, but with a concrete shape: a
-  **draggable demo** (two sliders = two bedtimes, SRI recomputed live) teaches *"average bedtime and
-  regularity are different axes"* faster than any prose, because the reader can watch the average stay
-  put while SRI falls. A hand-drawn prototype already exists (5 groups, same 00:00 mean, SRI 100 → −28.3;
-  **four of its five values reproduce exactly, one is off by 0.32** — use computed values in the shipped
-  page). Zero-dependency ESM is what makes this cheap: one `import` from a CDN, no build.
-  ⚠️ **Synthetic data only** — the page is public.
 - **Three-way cross-implementation check** (JS ↔ R ↔ Python). Phase is already verified against R's
   `mctq`; add Python's `pyActigraphy`, and R's `sleepreg` if Rtools ever appears. ⚠️ Same caveat that
   closed the SRI half of the R check: **a disagreement you cannot adjudicate is not evidence** — only
@@ -196,9 +191,6 @@ and the last section lists what will **not** happen.
 - **Zenodo DOI.** `CITATION.cff` already exists; wiring Zenodo gives every release a DOI at zero code
   cost on the GitHub side. For a library whose pitch is "these are research metrics", it is the
   cheapest formality available.
-- **A "if I stop maintaining this" note.** The README already promises no maintenance. Saying **what to
-  migrate to** and **how to get your data out** is more honest than silence — and that kind of honesty
-  is exactly what makes a dependency safe to adopt.
 - ❌ **Not planned, stated here so nobody re-litigates it:**
   an **activity-counts mode** — the README already warns that binary and counts conventions are not
   comparable, so shipping both would *manufacture* incomparable numbers; and a **population percentile
@@ -241,6 +233,6 @@ That promise is meant literally, so here is what to do when you need to move on:
 - **The numbers are pinned.** `test/regression.test.js` (private data) and
   `test/anchor-synthetic.test.js` (deterministic synthetic data, runs anywhere) fix the expected
   outputs, so a fork can tell within seconds whether it still computes the same thing.
-- **Vendoring is expected, not a fallback.** The published tarball **is** the source: 23 files, zero
-  dependencies, no build step, no postinstall. Copy them in, keep the ones you use, and there is no
+- **Vendoring is expected, not a fallback.** The published tarball **is** the source: 24 files (0.2.0),
+  zero dependencies, no build step, no postinstall. Copy them in, keep the ones you use, and there is no
   upgrade treadmill to fall off.

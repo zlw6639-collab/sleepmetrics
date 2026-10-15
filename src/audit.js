@@ -130,7 +130,7 @@ export function auditRecords(records, opts = {}) {
     // ⚠️ 关键区分（2026-10-13 实测修正）：`bed..wake` 是**卧床时长**（time in bed），
     //   而 `dur` 多半是**实际睡眠时长**（total sleep time）—— 两者**本来就不该相等**，
     //   差值是"入睡潜伏 + 夜间清醒"。所以只有 `dur` **超过**卧床时长才是真矛盾。
-    //   （旧规则把"不相等"一律当错 ⇒ 在本机 121 条数据上误报 37 条；教训见方案 §十二。）
+    //   （旧规则把"不相等"一律当错 ⇒ 在本机 121 条数据上误报 37 条；教训见设计笔记 §十二。）
     // `null` 视为「未给」（JSON 里 null 常表示无值），**不能**被当成 0 分钟 —— 那会误报 dur.too-short。
     if (r.dur !== undefined && r.dur !== null) {
       const given = Number(r.dur);

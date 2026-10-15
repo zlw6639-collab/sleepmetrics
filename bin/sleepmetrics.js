@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * sleepmetrics CLI —— **读文件只发生在这里**（项目方案 §10.2 硬边界 2：库本身不碰文件系统）。
+ * sleepmetrics CLI —— **读文件只发生在这里**（设计笔记 §10.2 硬边界 2：库本身不碰文件系统）。
  *
  * 用法：
  *   sleepmetrics sri   <records.json> [--window 7] [--min-day-minutes 180] [--influence] [--json]

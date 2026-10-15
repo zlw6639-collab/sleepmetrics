@@ -8,7 +8,7 @@
  * 用法：
  *   node examples/mifit-to-lib.mjs "E:\ai\mifit\raw\sleep.json" > records.json
  *
- * ⚠️ 红线（项目方案 §五 第 1 条）：`raw/` 里的真实健康数据**绝不进仓库**，也**不要**把
+ * ⚠️ 红线（设计笔记 §五 第 1 条）：`raw/` 里的真实健康数据**绝不进仓库**，也**不要**把
  *    转换结果提交上去 —— 它和原始数据一样敏感。
  */
 import fs from 'node:fs';
