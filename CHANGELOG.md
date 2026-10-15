@@ -125,13 +125,31 @@ All notable changes to this project are documented here. The format follows
   (measured 2026-10-15, with a note to re-measure). Added a **Run it right now** section — eight
   synthetic nights, copy-paste, with the verified output printed beside it — because the old Quick start
   referenced `records` and `holidaysTable` without defining either.
+- **⚠️ `computeIS()` was wrong: its numerator and denominator both omitted the overall-mean centring.
+  This is a *numbers-moving* fix.** The formula is `IS = N·Σ_h (x̄_h − x̄)² / (p·Σ_i (x_i − x̄)²)`; the
+  implementation computed `N·Σ_h x̄_h² / (p·Σ_i x_i²)` — a ratio of raw second moments instead of
+  variances. Four independent lines of evidence:
+  1. **Reference implementation**: `cran/nparACT`'s `nparACT_IS()` subtracts the mean. Its IV also
+     subtracts — and this library's `computeIV()` matched it **bit-for-bit across four sequences** — so
+     the IS version was a transcription slip, not a deliberate alternative convention.
+  2. **Internal inconsistency**: this library already centred IV, in the same formula family.
+  3. **Math**: without centring, `IS = (c + K) / (d + K)` with `K = N·p·x̄²`, which drifts toward 1 — the
+     higher a signal's baseline relative to its variation, the more "perfectly regular" it looks.
+  4. **Measured**: on `[1000,1005,1000,995, 1000,995,1000,1005]` — two days whose patterns are exact
+     opposites — the old code returned **0.99999** ("perfectly regular"); centred, it returns **0**.
 
-> **No numbers moved.** After all of the above, the real-data anchors **74.108 / 65.972 / 86.03** and
-> the synthetic anchors are bit-identical. Measured before touching anything: across the 121-record
-> real window **0 records** carried any of these defects, and the widest record spans 9.57 h — so the
-> stricter rules change what happens to *invalid* input, not to valid input. That is also why this is a
-> patch-level fix rather than a minor bump: the behaviour change is confined to records the library was
-> already discarding.
+  The synthetic IS anchor moved **0.7588 → 0.4228** (`iv` did not move, because IV was already right).
+  That anchor was **taken from the implementation**, so it could only ever guard against drift — it never
+  proved the formula. The proof now lives in `test/rhythm.test.js`, as a reference implementation
+  transcribed line-by-line from nparACT. The CLI does not expose IS/IV, so only library callers are
+  affected. ⚠️ **Per `RELEASE.md` §2 this is a minor bump, not a patch** — any change that moves a
+  number is.
+
+> **Numbers.** Everything above left the real-data anchors **74.108 / 65.972 / 86.03** and the synthetic
+> SRI / phase anchors bit-identical — measured before touching anything: across the 121-record real
+> window **0 records** carried those defects, and the widest record spans 9.57 h. **One number did
+> move**: the synthetic IS anchor, 0.7588 → 0.4228, because the formula itself was wrong. That is why
+> the IS entry is the only one above flagged as numbers-moving, and why it is a minor bump.
 
 ## [0.1.1] — 2026-10-14
 

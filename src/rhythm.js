@@ -6,11 +6,22 @@
  *   Alzheimer patients by application of nonparametric methods.*
  *   Chronobiol Int. 1999;16(4):505-518.        ← IS / IV 的提出处
  *
- *   IS = [ N · Σ_h (x̄_h)² ] / [ p · Σ_i (x_i)² ]                        日间稳定性（0~1，越大越稳）
+ *   IS = [ N · Σ_h (x̄_h − x̄)² ] / [ p · Σ_i (x_i − x̄)² ]                 日间稳定性（0~1，越大越稳）
  *   IV = [ N · Σ_{i≥2} (x_i − x_{i−1})² ] / [ (N−1) · Σ_i (x_i − x̄)² ]   日内变异性（越小越平稳）
  *
  *   N  = 观测点数；p = 每天的点数（1440 = 每分钟一个点）
  *   x̄_h = 「每天同一时刻 h」的平均值；x̄ = 全体均值
+ *
+ * ⚠️ **IS 的分子分母都减全体均值**（2026-10-15 修）。原来只算二阶矩 `Σ x̄_h² / Σ x_i²`，
+ *    漏了中心化。四条独立证据：
+ *      ① 参考实现 `cran/nparACT` 的 `nparACT_IS()` 减了均值 —— 而它那份 IV 也减，本库 IV 与它
+ *         **逐位一致**（实测四组序列）⇒ 是抄漏，不是"有意的另一种口径"；
+ *      ② 内部不自洽：同一族公式里 IV 减了、IS 没减；
+ *      ③ 数学：不减时 `IS = (c + K)/(d + K)`（`K = N·p·x̄²`）⇒ **系统性趋近 1**；
+ *      ④ 实测 `[1000,1005,1000,995, 1000,995,1000,1005]`（两天模式**完全相反**）：
+ *         原实现 **0.99999**（"完美规律"），中心化后 **0**（正确）。
+ *    ⇒ 这是**会动数字**的修复：按 `RELEASE.md` §2，动数字的改动是 **minor**，不是 patch。
+ *    由 `test/rhythm.test.js` 钉住（含一份逐行译自 nparACT 的参考实现作对照）。
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * ⚠️⚠️ **口径警告 —— 必须随结果一起读**
@@ -65,15 +76,23 @@ export function computeIS(values, opts = {}) {
   const days = n / perDay;
   if (days < 2) return null; // 一天没有"日间"可言
 
+  // ★ 分子分母都减全体均值（见文件顶部那条「IS 口径」说明）。
+  let meanAll = 0;
+  for (const v of values) meanAll += v;
+  meanAll /= n;
+
   let sumSq = 0;
-  for (const v of values) sumSq += v * v;
-  if (sumSq === 0) return null; // 全零序列：分母为 0，IS 无定义
+  for (const v of values) {
+    const d = v - meanAll;
+    sumSq += d * d;
+  }
+  if (sumSq === 0) return null; // 常数序列：总方差为 0 ⇒ 比值无定义（不是 0，是"没意义"）
 
   let sumMeanSq = 0;
   for (let h = 0; h < perDay; h += 1) {
     let s = 0;
     for (let d = 0; d < days; d += 1) s += values[d * perDay + h];
-    const m = s / days;
+    const m = s / days - meanAll;
     sumMeanSq += m * m;
   }
 
