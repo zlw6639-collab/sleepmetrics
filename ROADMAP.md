@@ -6,13 +6,6 @@ and the last section lists what will **not** happen.
 ## Next
 
 
-- [ ] **Confidence intervals for SRI (bootstrap).** A single number invites false precision,
-      especially at n = 7 nights.
-      ⚠️⚠️ **Statistical trap — never resample epochs.** Epochs within a night are strongly
-      autocorrelated, so an epoch-level bootstrap yields a **fake-narrow** interval that looks
-      authoritative. **Resample whole days (or day-pairs)**: the unit of observation for SRI is the
-      *transition between successive days*, not the minute. Ship it only with that unit stated — and
-      expect wide intervals at small n, because **that width is the finding**.
 - [ ] **Ghost-segment rules for `auditRecords()`** — flag sleep episodes that are not plausible
       *standalone* episodes: fragments left behind by a midnight split, and impossible holes or
       overlaps inside a night.
@@ -93,6 +86,24 @@ and the last section lists what will **not** happen.
       at n=85** — on a long window the deltas *look* like noise, and that is the correct reading.
       `isolated: true` marks a day that participates in **no pair at all**: dropping it cannot change
       anything, and that must **not** be read as "this night was regular". CLI: `--influence`.
+- [x] **Confidence intervals for SRI (bootstrap)** (2026-10-16) — `sriBootstrap()`:
+      `{ sri, lo, hi, level, resamples, block, seed, unit, degenerate, ... }`, **percentile method** (SRI is
+      skewed near ±100, where a symmetric interval would run past the bounds) and a **bundled PRNG** so the
+      same input always yields the same interval — a fact you can write down and a test can pin.
+      ✅ **The recorded trap was the whole design.** The unit of observation is the **day-pair**, never the
+      epoch: epochs within a night are autocorrelated, so an epoch-level bootstrap returns a
+      **fake-narrow** interval that looks authoritative. Two things enforce it — the result **states its
+      unit** (`unit: 'day-pair'`), and `test/bootstrap.test.js` **implements the epoch version as a
+      counter-example** and requires the day-pair interval to be far wider (≈5× on the synthetic fixture).
+      The guard was **reverse-checked**: switching the implementation to the epoch unit turns 4 tests red,
+      that one included.
+      ✅ **Wide at small n, and that width is the finding** — pinned by a test that walks 7 → 14 → all
+      nights and requires the interval to shrink. `block` defaults to 2 because adjacent day-pairs **share a
+      day**; the correction's *direction* depends on the data (measured: i.i.d. resampling comes out wider
+      on this fixture), so it is a **dependency-structure** parameter, not a conservativeness knob — that
+      was stated after measuring, not assumed.
+      `degenerate: true` marks < 2 day-pairs (the interval collapses — **not** "very certain").
+      CLI: `sri --ci [--seed N]`; `--json` gains `interval` **only when asked**, so the key set is unchanged.
 - [x] **Disclaimer** — `DISCLAIMER.md` (6 sections) + `DISCLAIMER` on every advisory return value.
 - [x] **Asides are forbidden on physiological metrics** (2026-10-14) — heart rate / HRV / SpO₂ /
       respiration / temperature / stress. A playful remark there reads as a **medical hint**, and that is

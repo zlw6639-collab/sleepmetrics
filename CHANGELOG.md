@@ -15,12 +15,47 @@ All notable changes to this project are documented here. The format follows
 ## [0.4.0] — 2026-10-16
 
 > **No number moved.** The regression anchors **74.108 / 65.972 / 86.03** and every synthetic anchor are
-> identical to `0.3.1`. `src/` was touched, but **only in comments** — no statement in any module
-> changed, which the anchors and all 12 test files confirm. What this adds is a **published surface**
-> (types) plus the mechanical check that keeps it honest.
+> identical to `0.3.1` — confirmed by the anchors and all **14** test files. This release adds a
+> **published surface**: hand-written types, a **`sriBootstrap()` entry point**, and the mechanical checks
+> that keep both honest.
+> ⚠️ Note that its two halves are **not the same kind of change**: the `.d.ts` pass touched `src/`
+> **only in comments**, while the bootstrap work **added code** (`src/bootstrap.js`, one new function in
+> `sri.js`, one export) — and still moved **no existing number**.
 
 ### Added
 
+- **★ `sriBootstrap()` — a confidence interval for SRI, resampled in the right unit.** A single SRI number
+  invites **false precision** (worst at n = 7), so the interval is now available:
+  `{ sri, lo, hi, level, resamples, block, seed, unit, degenerate, ... }`, computed with the **percentile
+  method** — SRI is skewed near ±100, where a symmetric "± 1.96 SE" interval would run past the bounds.
+  - ⚠️ **The unit of observation is the day-pair, never the epoch.** Epochs inside a night are strongly
+    autocorrelated, so an epoch-level bootstrap returns a **fake-narrow** interval that looks authoritative.
+    Enforced twice: the result **states its unit** (`unit: 'day-pair'`), and `test/bootstrap.test.js`
+    **implements the epoch version as a counter-example** and requires the day-pair interval to be far wider
+    (≈5× on the synthetic fixture). It is a *reverse-checked* guard: switching the implementation to the
+    epoch unit turns **4 tests red**, that one included.
+  - **Deterministic by construction.** The PRNG (mulberry32) is bundled instead of using `Math.random`, so
+    the same input gives the same interval — a fact you can write down and a test can pin. `seed` changes
+    it, and only it: the point estimate never moves.
+  - **Small n gives a wide interval, and that width is the finding** (`ROADMAP.md`'s words) — pinned by a
+    test that walks 7 → 14 → all nights and requires the interval to shrink. `block` defaults to 2 because
+    **adjacent day-pairs share a day** (their `same` counts are not independent); the *direction* of that
+    correction depends on the data — on this fixture i.i.d. resampling comes out **wider** — so it is a
+    **dependency-structure** parameter, not a conservativeness knob. Stated, not guessed.
+  - **`degenerate: true`** marks fewer than 2 day-pairs: the interval collapses to a point, and that must
+    **not** be read as "very certain" (same class of trap as `sriLeaveOneOut`'s `isolated`).
+- **CLI: `sri --ci`（＋`--seed N`）** — the interval on the human-readable path, and an `interval` object in
+  `--json`. ⚠️ **The machine contract is untouched**: without `--ci` the top-level key set is
+  character-for-character what the previous release emitted
+  (`schemaVersion,sri,days,pairs,from,to,skipped,window,minDayMinutes` — verified by diffing the old CLI
+  output, not assumed), and the interval is **not** duplicated from the top level: `interval` carries only
+  `lo / hi / level / unit / resamples / block / seed / degenerate`. `--seed` without `--ci` is a
+  **parameter error**, not a silent no-op.
+  ✅ `verify-all.ps1` now pins **both** directions so neither can drift silently: **A6** (the key set is
+  unchanged without the flag) and **A6b** (exactly one extra key, `interval`, with it).
+- **Types**: `SRIBootstrapResult` / `SRIBootstrapOptions` in `sleepmetrics.d.ts`, with `unit: 'day-pair'` as
+  a **literal type**, plus three new reverse cases in `test/types/expect-error.ts` (nullable `lo`, a
+  required first argument, and an `'epoch'` unit that must not compile).
 - **★ Hand-written type declarations — `sleepmetrics.d.ts`.** First-class TypeScript support with **no
   build chain**: the file is source, shipped in the tarball like everything else, and nothing generates
   it. `types` and a `types` condition in `exports` point at it, so consumers need no configuration and
@@ -90,7 +125,23 @@ All notable changes to this project are documented here. The format follows
 
 - **README** gained a `### TypeScript` section: what ships, the two things that surprise people
   (discriminated unions, `Record` shadowing), and how the declarations are checked.
-- **ROADMAP**: the type-declarations item moved from *Next* to *Done*.
+- **ROADMAP**: the type-declarations item moved from *Next* to *Done*; the **bootstrap item moved from
+  *Next* to *Done** as well, recording what the trap actually cost.
+- **README** also gained the `sriBootstrap()` **API row** and a new **Semantics** rule (9): why the interval
+  resamples **day-pairs** rather than epochs, why a short window is wide **on purpose**, and why `block` is a
+  dependency-structure parameter instead of a conservativeness knob. Its **size line** was re-measured while
+  it was open — **~128 kB / 27 files** (it had been quoting ~87 kB / 24 files from 2026-10-15, already stale
+  once the type declarations and the heatmap landed).
+
+### Internal
+
+- `src/bootstrap.js` — a generic circular **moving-block** bootstrap (`bootstrapCI`, `mulberry32`,
+  `percentile`). **Deliberately not exported**: the unit is not an option, and shipping a "pick your own
+  unit" helper would hand callers exactly the rope `ROADMAP.md` warns about. Its return type is inlined
+  rather than declared as a named `@typedef` for the same reason — a named type on the published surface
+  would imply the function is one.
+- `scripts/verify-all.ps1`: A2 runs `test/bootstrap.test.js` (**14** test files), and **A6b** was added to
+  pin the `--ci` key set from the other side (see above).
 
 ## [0.3.1] — 2026-10-15
 

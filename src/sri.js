@@ -41,6 +41,9 @@ import { MIN_PER_DAY, SEC_PER_DAY, dayOf, dayStartSec, isPlausibleTz, resolveTz 
 // ⚠️ 时间戳可表示范围是**同一个判据**：`records.js` 用它决定「这条记录算不算数」，
 //    这里用它保证 `buildGrid()` 的标记循环不会挂死。⇒ 共享常量，别各写一份（两份会漂）。
 import { DATE_MAX_SEC } from './records.js';
+// ★ 重抽样工具放在 `bootstrap.js`：它**不知道 SRI 是什么**（只接受「观察单位数组 + 统计量」），
+//   所以「单位必须是天对」这条纪律由**本文件的调用点**负责 —— 见 `sriBootstrap()`。
+import { bootstrapCI } from './bootstrap.js';
 
 /**
  * ★ SRI 网格的**参考时区** —— **整段窗口一个**，绝不按记录各用各的。
@@ -176,8 +179,10 @@ export function buildGrid(records, tz) {
  */
 function decompose(records, opts = {}) {
   // 显式 `null` 视同「未给」；tz 不合法就抛（见 `resolveTz`）。
-  // ★ **三个入口（`computeSRI` / `sriLastN` / `sriLeaveOneOut`）都只把 `opts` 原样传进来**，
-  //   所以校验放在这一处，它们自动受益 —— 判据只有一份，不会各写各的。
+  // ★ **四个入口（`computeSRI` / `sriLastN` / `sriLeaveOneOut` / `sriBootstrap`）都只把 `opts`
+  //   原样传进来**，所以校验放在这一处，它们自动受益 —— 判据只有一份，不会各写各的。
+  //   （`sriBootstrap` 的 `opts` 里另有 level/resamples/seed/block：那四个键在这里被忽略，
+  //     它们属于重抽样、不属于网格口径。解构只取需要的键，所以不会互相污染。）
   //   ⚠️ `tz` 缺省时**不写死 8**，交给 `gridTz()` 从记录推断（见那里的口径说明）。
   const { minDayMinutes = 180, tz: tzRaw } = opts ?? {};
   const tz = gridTz(records, tzRaw, 'computeSRI');
@@ -262,7 +267,8 @@ export function computeSRI(records, opts = {}) {
 
 /**
  * 窗口切片的**唯一实现** —— 锚点取「主睡眠最后一条的醒来时间」（§十一 第 4 条）。
- * `sriLastN()` 与 `sriLeaveOneOut()` 必须共用它，别再各写一份过滤（同一个「近 7 晚」曾经算出两个值）。
+ * `sriLastN()` / `sriLeaveOneOut()` / `sriBootstrap()` 必须共用它，别再各写一份过滤
+ * （同一个「近 7 晚」曾经算出两个值）。
  * @param {Array<object>} allSegs @param {Array<object>} mainSegs @param {number|null|undefined} w
  */
 function windowSlice(allSegs, mainSegs, w) {
@@ -334,5 +340,90 @@ export function sriLeaveOneOut(allSegs, mainSegs, w, opts = {}) {
 
   return {
     sri: base, days: days.length, pairs: dayPairs.length, out,
+  };
+}
+
+/**
+ * `sriBootstrap()` 的返回。
+ * @typedef {object} SRIBootstrapResult
+ * @property {number|null} sri 点估计 —— 与 `computeSRI().sri` **同一口径**（不重算、不另设公式）
+ * @property {number|null} lo 区间下界（百分位法）
+ * @property {number|null} hi 区间上界
+ * @property {number} level 置信水平（默认 0.95）
+ * @property {number} resamples 重抽样次数（默认 2000）
+ * @property {number} block 块长（默认 2，**已按天对数夹过**）
+ * @property {number} seed 种子 —— **同一种子 ⇒ 同一区间**（可复现）
+ * @property {string} unit **恒为 `'day-pair'`**：重抽样的单位是**天对**，不是 epoch
+ * @property {boolean} degenerate `true` = 天对少于 2 ⇒ 区间退化成一个点。
+ *   ⚠️ **这不代表"很确定"**，恰恰相反：没有相邻天对就估不出宽度（见 `sriLeaveOneOut` 的 `isolated` 同一类陷阱）
+ * @property {number} days 有效天数
+ * @property {number} pairs 天对数（= 重抽样的样本量）
+ * @property {string|null} from 窗口内第一天（`YYYY-MM-DD`）
+ * @property {string|null} to 窗口内最后一天
+ * @property {string[]} skipped 被有效天门槛整个剔除的自然日
+ */
+
+/**
+ * ★ SRI 的 **bootstrap 置信区间** —— 回答「这一个数字有多可信」。
+ *
+ * 为什么需要它：`SRI` 在 n = 7 晚时只是一次 `-100 + 200·(同态比例)` 的算术结果，
+ * 而**单个数字会招来虚假的精度**（读者会自动把它当成"我的规律性 = 65.9"）。
+ * 区间把"这份估计本身有多飘"摆到台面上。
+ *
+ * ⚠️⚠️ **红线：重抽样的单位是天对，绝不是 epoch。**
+ *   同一晚之内的 epoch 高度自相关（一段睡眠 = 连续几百个相同的 1），按 epoch 重抽样会把
+ *   「一晚内部的重复」当成上千份独立证据 ⇒ 区间**假窄**，窄到看着权威、其实骗人。
+ *   `test/bootstrap.test.js` 里有一条测试**专门**把这两种口径摆在一起对拍：
+ *   按 epoch 抽出来的区间必须**明显更窄** —— 那条断言就是这条红线的守卫。
+ *   （`ROADMAP.md` 的 bootstrap 条目记的就是这个陷阱。）
+ *
+ * ⚠️ **块长 2 是冲着依赖结构去的，不是调参**：相邻两个天对**共享一天** ⇒ 它们的 `same` 不独立，
+ *   再远的天对不共享任何一天。块长 1 会**直接忽略**这层协方差，而偏差方向**取决于数据**
+ *   （本仓库的合成数据上，i.i.d. 反而给出**更宽**的区间 —— 那份数据里相邻天对是负相关的）
+ *   ⇒ 别把块长当"保守度"旋钮。
+ *
+ * ⚠️ **小 n 上区间很宽，而"宽"就是结论**（`ROADMAP.md` 的原文：that width is the finding）。
+ *   别为了好看的窄区间去调 `minDayMinutes` 或窗口 —— 那是在挑数据，不是在做统计。
+ *
+ * ⚠️ **它不是"睡眠评分"的误差棒**，也不是"真值落在里面的概率"：
+ *   它说的是「若把你这几晚当作从你的规律性里抽出来的样本，SRI 这个统计量会飘多少」。
+ *
+ * @param {Array<object>} allSegs 全部睡眠段（含小睡）—— 算 SRI 用它
+ * @param {Array<object>} [mainSegs] 主睡眠段 —— **只用来取窗口锚点**（与 `sriLastN` 同一口径）
+ * @param {number|null} [w] 窗口天数；null / 0 / undefined = 全量
+ * @param {{minDayMinutes?: number, tz?: number, level?: number, resamples?: number, seed?: number, block?: number}} [opts]
+ * @returns {SRIBootstrapResult|null} `allSegs` 非数组 ⇒ `null`（不猜）
+ */
+export function sriBootstrap(allSegs, mainSegs, w, opts = {}) {
+  if (!Array.isArray(allSegs)) return null;   // 非数组 ⇒ 不猜
+  const { days, skipped, dayPairs } = decompose(windowSlice(allSegs, mainSegs, w), opts);
+  const sames = dayPairs.map((p) => p.same);
+
+  // 统计量就是 SRI 本身 —— **按天对求和**，所以重抽样的单位自动是天对。
+  // ⚠️ 别在这里改成「按 epoch 展开」：那正是上面红线上说的假窄区间。
+  const ci = bootstrapCI(sames, {
+    statistic: (s) => sriOf(s.reduce((n, v) => n + v, 0), s.length),
+    level: opts?.level,
+    resamples: opts?.resamples,
+    seed: opts?.seed,
+    block: opts?.block,
+    unit: 'day-pair',
+  });
+
+  return {
+    sri: ci.point,
+    lo: ci.lo,
+    hi: ci.hi,
+    level: ci.level,
+    resamples: ci.resamples,
+    block: ci.block,
+    seed: ci.seed,
+    unit: ci.unit,
+    degenerate: ci.degenerate,
+    days: days.length,
+    pairs: dayPairs.length,
+    from: days[0] ?? null,
+    to: days.at(-1) ?? null,
+    skipped,
   };
 }

@@ -280,6 +280,68 @@ export declare function sriLeaveOneOut(
   opts?: SRIOptions | null,
 ): LOOResult | null;
 
+/** `sriBootstrap()` 的返回。 */
+export interface SRIBootstrapResult {
+  /** 点估计 —— 与 `computeSRI().sri` **同一口径**（不重算、不另设公式） */
+  sri: number | null;
+  /** 区间下界（百分位法）；没有任何天对时为 `null` */
+  lo: number | null;
+  /** 区间上界；没有任何天对时为 `null` */
+  hi: number | null;
+  /** 置信水平（默认 0.95） */
+  level: number;
+  /** 重抽样次数（默认 2000） */
+  resamples: number;
+  /** 块长（默认 2，**已按天对数夹过**） */
+  block: number;
+  /** 种子 —— **同一种子 ⇒ 同一区间**（可复现） */
+  seed: number;
+  /**
+   * **恒为 `'day-pair'`**：重抽样的单位是**天对**，不是 epoch。
+   * ⚠️ 一晚之内的分钟高度自相关，按 epoch 抽会得到**假窄**的区间 —— 这个字段就是在说"我们没这么干"。
+   */
+  unit: 'day-pair';
+  /**
+   * `true` = 天对少于 2 ⇒ 区间退化成一个点。
+   * ⚠️ **不代表「很确定」**，恰恰相反：没有相邻天对就估不出宽度。
+   */
+  degenerate: boolean;
+  /** 参与计算的有效天数 */
+  days: number;
+  /** 天对数（= 重抽样的样本量） */
+  pairs: number;
+  /** 窗口内第一天（`YYYY-MM-DD`） */
+  from: string | null;
+  /** 窗口内最后一天 */
+  to: string | null;
+  /** 被有效天门槛（`minDayMinutes`）整个剔除的自然日 */
+  skipped: string[];
+}
+
+/** `sriBootstrap()` 的选项：网格口径（`SRIOptions`）＋重抽样参数。 */
+export interface SRIBootstrapOptions extends SRIOptions {
+  /** 置信水平，`0 < level < 1`（默认 0.95）；越界抛 `RangeError` */
+  level?: number;
+  /** 重抽样次数（≥1 的整数，默认 2000） */
+  resamples?: number;
+  /** 种子（有限数，默认 20261016）—— 决定区间，喂同一个种子就得到同一个结果 */
+  seed?: number;
+  /** 块长（≥1 的整数，默认 2）—— **保留依赖结构**的参数，不是"保守度"旋钮 */
+  block?: number;
+}
+
+/**
+ * ★ SRI 的 **bootstrap 置信区间** —— 回答「这一个数字有多可信」。
+ * ⚠️ **单位是天对，不是 epoch**（`unit` 字段会说明）；**小 n 上很宽，而宽就是结论**。
+ * @returns 非数组输入返回 `null`（不猜）
+ */
+export declare function sriBootstrap(
+  allSegs: RecordsInput,
+  mainSegs?: RecordsInput,
+  w?: number | null,
+  opts?: SRIBootstrapOptions | null,
+): SRIBootstrapResult | null;
+
 /* ────────────────────────── IS / IV（`src/rhythm.js`） ────────────────────────── */
 
 /** `computeIS()` 的返回。 */

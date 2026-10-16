@@ -13,7 +13,7 @@
  */
 import fs from 'node:fs';
 import {
-  allSleep, mainSleep, computeSRI, sriLastN, sriLeaveOneOut, computePhase, makeRestJudge, minToClock,
+  allSleep, mainSleep, computeSRI, sriLastN, sriLeaveOneOut, sriBootstrap, computePhase, makeRestJudge, minToClock,
   dailyMain, circMean, circDiff, clockMin, dayOf, auditRecords,
 } from '../src/index.js';
 import { buildHeatmap, renderHeatmap } from './heatmap.js';
@@ -21,7 +21,7 @@ import { buildHeatmap, renderHeatmap } from './heatmap.js';
 const USAGE = `sleepmetrics —— 标准睡眠指标（纯 JS，零依赖）
 
 用法：
-  sleepmetrics sri   <records.json> [--window N] [--min-day-minutes N] [--influence] [--json]
+  sleepmetrics sri   <records.json> [--window N] [--min-day-minutes N] [--influence] [--ci] [--seed N] [--json]
   sleepmetrics phase <records.json> [--window N] [--free-days <表.json>] [--json]
   sleepmetrics audit <records.json> [--json]
   sleepmetrics heatmap <records.json> [--window N]
@@ -46,6 +46,13 @@ audit 先跑它：脏数据**不会报错**，只会让指标给出看着正常�
   phase  睡眠相位与社交时差（Roenneberg）。需要 --holidays 才能区分工作日/休息日。
   --influence  逐日影响度：去掉某一晚之后 SRI 会变成多少。
                小窗口上最有诊断力（近 7 晚时一晚能值 ±11 分，全量 85 天时不到 ±1 分）。
+  --ci         SRI 的 bootstrap 置信区间（95%）。单个数字会招来**虚假的精度**，区间把它摆到台面上。
+               ⚠️ 重抽样的单位是「**天对**」（相隔 24h 的一对天），**不是 epoch** ——
+                  一晚之内的分钟高度自相关，按 epoch 抽会得到**假窄**的区间，看着权威其实骗人。
+               ⚠️ 小样本上区间很宽，而**宽就是结论**：近 7 晚时别指望一个窄区间。
+               同一种子（--seed）永远给出同一个区间 ⇒ 可复现、可以写进笔记。
+               ⚠️ 它**不是**「真值有 95% 概率落在里面」，而是「若把这几晚当作从你的规律性里
+                  抽出来的样本，SRI 这个统计量会飘多少」。它与睡眠评分无关。
 
 ⚠️ Windows 老控制台（cmd.exe）里中文/符号可能显示为乱码或方框：
    先跑一次 「chcp 65001」 切到 UTF-8，或改用 Windows Terminal / PowerShell 7。
@@ -244,6 +251,7 @@ function aside(ctx = {}) {
 function parseArgs(argv) {
   const out = {
     cmd: argv[0], file: null, window: null, minDayMinutes: 180, holidays: null, json: false, influence: false,
+    ci: false, seed: null,
     errors: [],
   };
   const rest = argv.slice(1);
@@ -273,7 +281,15 @@ function parseArgs(argv) {
     const a = rest[i];
     if (a === '--json') out.json = true;
     else if (a === '--influence') out.influence = true;
-    else if (a === '--window') { out.window = numOpt('--window', i, { min: 0, integer: true }); i += 1; } else if (a === '--min-day-minutes') {
+    else if (a === '--ci') out.ci = true;
+    else if (a === '--seed') {
+      const v = numOpt('--seed', i, { min: 0, integer: true });
+      if (v !== null) out.seed = v;
+      i += 1;
+    } else if (a === '--window') {
+      out.window = numOpt('--window', i, { min: 0, integer: true });
+      i += 1;
+    } else if (a === '--min-day-minutes') {
       const v = numOpt('--min-day-minutes', i, { min: 0, integer: true });
       if (v !== null) out.minDayMinutes = v;
       i += 1;
@@ -284,6 +300,9 @@ function parseArgs(argv) {
     } else if (a.startsWith('-')) out.errors.push(`未知选项 ${a}`);
     else if (out.file === null) out.file = a;
   }
+  // `--seed` 只对 `--ci` 有意义 ⇒ 单独给它等于**什么都没发生**，必须报出来。
+  // （本库不给"悄悄无效的参数"发通行证：静默忽略会让写脚本的人以为自己换了种子。）
+  if (out.seed !== null && !out.ci) out.errors.push('--seed 只与 --ci 一起用（否则它不影响任何输出）');
   return out;
 }
 
@@ -402,16 +421,48 @@ if (args.cmd === 'audit') {
   const loo = args.influence
     ? sriLeaveOneOut(all, main, args.window, { minDayMinutes: args.minDayMinutes })
     : null;
+  // ⚠️ bootstrap 与上面的 `r` **共用同一个窗口口径**（`sriBootstrap` 内部用的是同一个
+  //    `windowSlice()`）—— 所以 `ci.pairs` 必然等于 `r.pairs`，不是"另算了一份"。
+  const ci = args.ci
+    ? sriBootstrap(all, main, args.window, {
+      minDayMinutes: args.minDayMinutes,
+      ...(args.seed === null ? {} : { seed: args.seed }),
+    })
+    : null;
   if (args.json) {
-    // ⚠️ `--json` 是机器契约：**不带 --influence 时顶层输出一字不变**。
-    //    `influence` 只在调用方**显式要求**时才出现 —— 不是偷偷塞进去的花样。
+    // ⚠️ `--json` 是机器契约：**不带 --influence / --ci 时顶层输出一字不变**。
+    //    两个可选块只在调用方**显式要求**时才出现 —— 不是偷偷塞进去的花样。
     const base = { schemaVersion: SCHEMA_VERSION, ...r, window: args.window ?? null, minDayMinutes: args.minDayMinutes };
-    console.log(JSON.stringify(loo ? { ...base, influence: loo.out } : base, null, 2));
+    const extra = {};
+    if (loo) extra.influence = loo.out;
+    if (ci) {
+      // 只放**区间自己的**字段：sri/days/pairs/... 顶层已经有了，重复一遍就是两个来源。
+      extra.interval = {
+        lo: ci.lo,
+        hi: ci.hi,
+        level: ci.level,
+        unit: ci.unit,
+        resamples: ci.resamples,
+        block: ci.block,
+        seed: ci.seed,
+        degenerate: ci.degenerate,
+      };
+    }
+    console.log(JSON.stringify(Object.keys(extra).length ? { ...base, ...extra } : base, null, 2));
   } else {
     console.log(`SRI            ${r.sri.toFixed(1)}   （取值范围 −100~100：完全规律 = 100、与随机无法区分 = 0、比随机还糟为负；与睡眠时长不相关）`);
     console.log(`窗口           ${r.from} ~ ${r.to}${args.window ? `（近 ${args.window} 晚）` : '（全量）'}`);
     console.log(`有效天 / 天对  ${r.days} 天 / ${r.pairs} 对`);
     if (r.skipped.length) console.log(`已剔除的天     ${r.skipped.join(' ')}（当天睡着 < ${args.minDayMinutes} 分钟）`);
+
+    if (ci) {
+      const pct = Math.round(ci.level * 100);
+      if (ci.degenerate) {
+        console.log(`${pct}% 区间       ${ci.lo.toFixed(1)} ~ ${ci.hi.toFixed(1)}   ⚠️ **退化**：只有 ${ci.pairs} 个天对，宽度估不出来 —— 别把这个宽度读成「很确定」`);
+      } else {
+        console.log(`${pct}% 区间       ${ci.lo.toFixed(1)} ~ ${ci.hi.toFixed(1)}   ← bootstrap，重抽样单位 =「天对」；小样本上很宽，而**宽就是结论**`);
+      }
+    }
 
     if (loo) {
       // 按 |Δ| 排序 —— 最该看的是"去掉它变化最大"的那几晚，不是日期顺序。

@@ -27,7 +27,7 @@ foreach ($f in $srcFiles) { node --check $f.FullName 2>&1 | Out-Null; if ($LASTE
 Check 'A1 语法门' ($syntaxBad.Count -eq 0) "$($srcFiles.Count) 个文件，失败 $(($syntaxBad -join ','))"
 
 # A2 全部测试
-$tests = @('time', 'records', 'contract', 'sri', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'heatmap', 'aside-guard', 'anchor-synthetic', 'regression')
+$tests = @('time', 'records', 'contract', 'sri', 'bootstrap', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'heatmap', 'aside-guard', 'anchor-synthetic', 'regression')
 $testBad = @()
 foreach ($t in $tests) { node "test\$t.test.js" > $null 2>&1; if ($LASTEXITCODE -ne 0) { $testBad += $t } }
 Check 'A2 测试' ($testBad.Count -eq 0) "$($tests.Count) 个文件，失败 $(($testBad -join ','))"
@@ -59,6 +59,20 @@ if (Test-Path $rec) {
   $jsonNote = "schemaVersion=$($keys -split ',' | Where-Object { $_ -eq 'schemaVersion' } | Measure-Object | Select-Object -ExpandProperty Count)"
 }
 Check 'A6 --json 契约' $jsonOk $keys
+
+# A6b `--ci` 的**增量**契约 —— A6 钉住"不带 --ci 时一字不变"，这里钉住"带 --ci 时只多一个 interval"。
+#     ⚠️ 两边都要钉：只测一边的话，新增字段会**悄悄**混进默认输出（AGENTS.md 规矩 4），
+#        或者 interval 里混进与顶层重复的字段（两个来源迟早漂）。
+$ciOk = $false; $ciKeys = '(未跑)'
+if (Test-Path $rec) {
+  node bin\sleepmetrics.js sri $rec --ci --json > "$env:TEMP\v_sri_ci.json" 2>&1
+  $ciKeys = (node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync(process.env.TEMP+'/v_sri_ci.json','utf8'))).join(','))" 2>&1)
+  $ciInner = (node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync(process.env.TEMP+'/v_sri_ci.json','utf8')).interval).join(','))" 2>&1)
+  $ciOk = ($ciKeys -eq 'schemaVersion,sri,days,pairs,from,to,skipped,window,minDayMinutes,interval') `
+    -and ($ciInner -eq 'lo,hi,level,unit,resamples,block,seed,degenerate')
+  $ciKeys = "$ciKeys ｜ interval: $ciInner"
+}
+Check 'A6b --ci 增量契约' $ciOk $ciKeys
 
 # A7 零依赖 + 库本体不碰 fs/网络
 $pkg = Get-Content package.json -Raw | ConvertFrom-Json

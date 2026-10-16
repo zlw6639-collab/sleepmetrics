@@ -16,6 +16,7 @@ import {
   normalizeNight,
   nudgeDecision,
   computeSRI,
+  sriBootstrap,
   type Record as SleepRecord,
   type PhaseOk,
   type SuggestOk,
@@ -84,4 +85,15 @@ declare const okPhase: PhaseOk;
 // @ts-expect-error `PhaseOk` 上 `insufficient` 不是 `true`
 const flag: true = okPhase.insufficient;
 
-void [missingWake, typo, badStage, grid, sri, phase, suggestion, nudge, flag];
+/* ── 9. `sriBootstrap`：区间两端可空，单位是字面量类型 ── */
+const ci = sriBootstrap(records, null, 7);
+if (ci) {
+  // @ts-expect-error `lo` 是 `number | null`（没有任何天对时为 null）—— 必须显式判空
+  const lower: number = ci.lo;
+  // @ts-expect-error `unit` 只可能是 `'day-pair'`：若哪天改成按 epoch 抽，这里会在编译期就红
+  const epochUnit: 'epoch' = ci.unit;
+}
+// @ts-expect-error 第一个参数（记录数组）是必填的 —— 不是所有参数都有默认值
+sriBootstrap();
+
+void [missingWake, typo, badStage, grid, sri, phase, suggestion, nudge, flag, ci];

@@ -13,6 +13,7 @@
  *   const main = mainSleep(records)         // 主睡眠 —— 取窗口锚点 / 算相位用它
  *   computeSRI(all)                         // 全量 SRI
  *   sriLastN(all, main, 7)                  // 近 7 晚 SRI（锚点唯一，见 sriLastN 注释）
+ *   sriBootstrap(all, main, 7)              // 近 7 晚 SRI 的 bootstrap 区间（**单位 = 天对**，见该函数）
  *   const rest = makeRestJudge(holidays)    // 表自己读（库不读）
  *   computePhase(main, rest.isRest)         // MSFsc / SJL
  */
@@ -32,7 +33,7 @@ export {
 
 export { normalize, allSleep, mainSleep, dailyMain } from './records.js';
 
-export { buildGrid, computeSRI, sriLastN, sriLeaveOneOut } from './sri.js';
+export { buildGrid, computeSRI, sriLastN, sriLeaveOneOut, sriBootstrap } from './sri.js';
 
 export { computeIS, computeIV } from './rhythm.js';
 

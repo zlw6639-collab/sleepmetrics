@@ -13,6 +13,7 @@ import {
   computeSRI,
   sriLastN,
   sriLeaveOneOut,
+  sriBootstrap,
   computeIS,
   computeIV,
   computePhase,
@@ -47,6 +48,7 @@ import {
   type Stage,
   type SRIResult,
   type LOOResult,
+  type SRIBootstrapResult,
   type PhaseResult,
   type ISResult,
   type IVResult,
@@ -99,6 +101,19 @@ if (loo) {
     if (delta !== null && delta > 0 && !isolated) perDay;
   }
 }
+
+/* ── SRI 的 bootstrap 区间（单位是天对，见 `unit`）── */
+const ci: SRIBootstrapResult | null = sriBootstrap(all, main, 7);
+if (ci) {
+  const point: number | null = ci.sri;
+  const lower: number | null = ci.lo;
+  const upper: number | null = ci.hi;
+  const asDayPair: 'day-pair' = ci.unit; // 字面量类型：换成别的口径会在编译期就红
+  const { level, resamples, block, seed, degenerate, pairs: ciPairs } = ci;
+}
+const ciTuned: SRIBootstrapResult | null = sriBootstrap(all, null, null, {
+  minDayMinutes: 180, tz: 8, level: 0.9, resamples: 500, seed: 1, block: 3,
+});
 
 /* ── IS / IV ── */
 const is: ISResult | null = computeIS([1, 2, 3, 4], { perDay: 2 });

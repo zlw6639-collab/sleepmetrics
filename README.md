@@ -208,6 +208,7 @@ changes on its own schedule.
 | `computeSRI(records, { minDayMinutes = 180, tz })` | `{ sri, days, pairs, from, to, skipped }` |
 | `sriLastN(allSegs, mainSegs, w, opts)` | windowed SRI; `w` falsy = all-time |
 | `sriLeaveOneOut(allSegs, mainSegs, w, opts)` | 逐日影响度 — `{ sri, days, pairs, out: [{ date, sri, delta, pairs, isolated }] }`。**只在小窗口上有诊断力**：一晚在 n=7 时值 ±11 分，在 n=85 时不到 ±1 分。`delta > 0` = 去掉它 SRI 反而升 = 它拖后腿 |
+| `sriBootstrap(allSegs, mainSegs, w, opts)` | SRI 的 **bootstrap 置信区间** — `{ sri, lo, hi, level, resamples, block, seed, unit, degenerate, days, pairs, ... }`。⚠️ **重抽样的单位是天对**（`unit: 'day-pair'`），**不是 epoch** —— 一晚之内的分钟高度自相关，按 epoch 抽会得到**假窄**的区间。小 n 上很宽，而**宽就是结论**；同一种子永远给出同一个区间（可复现）。`opts`: `{ minDayMinutes, tz, level = 0.95, resamples = 2000, seed, block = 2 }` |
 | `computePhase(records, isRest, { windowDays = 30, tz })` | `{ msw, msf, msfsc, sjl, sjlSc, ... }` |
 | `makeRestJudge(table)` | `{ isRest, isHoliday, isMakeupWorkday, isWeekend, missingYears }` |
 | `auditRecords(records, opts)` | **data health report** — `{ issues, summary }`；只报告、不修改 |
@@ -384,6 +385,22 @@ These are the places where a reasonable-looking rewrite silently produces wrong 
    day boundary is *the axis you compare on* (uniform). A stream that mixes timezones falls back to
    `+8` for the grid, and `auditRecords()` flags it (`tz.mixed`) so you can pick one explicitly.
    → `contract.test.js`: *"跨时区旅行：SRI 不许接近满分 —— 那意味着网格按记录各切各的了"*
+9. **The SRI confidence interval resamples DAY-PAIRS — never epochs.** `sriBootstrap()` exists because a
+   single number invites **false precision**, most of all at n = 7. The unit of observation for SRI is the
+   **transition between successive days** (1440 comparisons), not the minute: epochs inside one night are
+   strongly autocorrelated — a sleep bout is hundreds of identical `1`s — so an epoch-level bootstrap
+   treats those repeats as thousands of independent observations and returns a **fake-narrow** interval
+   that looks authoritative. The result states its unit (`unit: 'day-pair'`), and the test suite pins the
+   contrast rather than trusting the comment: on the same synthetic fixture the epoch-level width comes
+   out **about 5× narrower**. Expect **wide** intervals on short windows — **that width is the finding**,
+   not a defect to tune away. Blocks of 2 are the default because **adjacent day-pairs share a day**, so
+   their `same` counts are not independent; the *direction* of that correction depends on the data (on
+   this fixture i.i.d. resampling comes out wider, not narrower), which is why `block` is a
+   **dependency-structure** parameter and not a conservativeness knob. And it is **not** an error bar on a
+   "sleep score": it says how much *the statistic* would move, not where the truth lies.
+   `degenerate: true` means fewer than 2 day-pairs ⇒ the interval collapses to a point, which must **not**
+   be read as "very certain".
+   → `bootstrap.test.js`: *"按 epoch 重抽样会给出「假窄」区间"* / *"小 n 的区间更宽"* / *"只有 1 个天对 ⇒ degenerate=true"*
 
 ## Tests are the spec
 
@@ -407,8 +424,8 @@ SLEEPMETRICS_REAL_DATA=/path/to/records.json npm run regression
 
 ## Size and performance
 
-- **Published tarball: ~87 kB** (216 kB unpacked, 24 files) — no build output, no dependencies.
-  (2026-10-15, `npm pack --dry-run`. Re-measure before quoting a precise figure: this line ships
+- **Published tarball: ~128 kB** (319 kB unpacked, 27 files) — no build output, no dependencies.
+  (2026-10-16, `npm pack --dry-run`. Re-measure before quoting a precise figure: this line ships
   **inside** the tarball, so the number moves whenever the docs do.)
 - **Pure ESM with no Node-only APIs** (`fs` / `net` / `process` / `Buffer`) ⇒ it also runs in the browser.
 - Newest syntax used: `??`, `?.`, and a single `Array.prototype.at` ⇒ Node 16.6+ / browsers from 2022.
