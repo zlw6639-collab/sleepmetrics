@@ -3,7 +3,7 @@
 # 用法：pwsh -File scripts\verify-all.ps1
 #
 # 覆盖三块：
-#   A 库侧   —— 语法门 / 全部测试 / 回归锚点 / 链接门 / 发布物内容 / CLI 契约 / 零依赖与无 IO / examples / R 交叉 / 打包安装 smoke
+#   A 库侧   —— 语法门 / 全部测试 / 回归锚点 / 链接门 / 发布物内容 / CLI 契约 / 零依赖与无 IO / examples / R 交叉 / 打包安装 smoke / 类型声明门
 #   B 本机侧 —— analyze / report / rhythm / datacheck / 催睡闸门
 #   C 仓库与文档 —— 文档两侧哈希一致 / git 干净且与远端同步 / 知识库入库
 #
@@ -27,7 +27,7 @@ foreach ($f in $srcFiles) { node --check $f.FullName 2>&1 | Out-Null; if ($LASTE
 Check 'A1 语法门' ($syntaxBad.Count -eq 0) "$($srcFiles.Count) 个文件，失败 $(($syntaxBad -join ','))"
 
 # A2 全部测试
-$tests = @('time', 'records', 'contract', 'sri', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'aside-guard', 'anchor-synthetic', 'regression')
+$tests = @('time', 'records', 'contract', 'sri', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'heatmap', 'aside-guard', 'anchor-synthetic', 'regression')
 $testBad = @()
 foreach ($t in $tests) { node "test\$t.test.js" > $null 2>&1; if ($LASTEXITCODE -ne 0) { $testBad += $t } }
 Check 'A2 测试' ($testBad.Count -eq 0) "$($tests.Count) 个文件，失败 $(($testBad -join ','))"
@@ -45,7 +45,7 @@ Check 'A4 链接门' ($LASTEXITCODE -eq 0) 'README 内部链接都在 files 里'
 $pack = (npm pack --dry-run 2>&1 | Out-String)
 $pFiles = [regex]::Match($pack, 'total files:\s*(\d+)').Groups[1].Value
 $pSize = [regex]::Match($pack, 'package size:\s*([\d.]+ \w+)').Groups[1].Value
-$need = @('README.md', 'REFERENCES.md', 'SLEEP-FACTS.md', 'PUSHING-TO-YOUR-PHONE.md', 'ROADMAP.md', 'NON-GOALS.md', 'DISCLAIMER.md', 'HOLIDAYS.md', 'LICENSE', 'src/index.js', 'bin/sleepmetrics.js')
+$need = @('README.md', 'REFERENCES.md', 'SLEEP-FACTS.md', 'PUSHING-TO-YOUR-PHONE.md', 'ROADMAP.md', 'NON-GOALS.md', 'DISCLAIMER.md', 'HOLIDAYS.md', 'LICENSE', 'src/index.js', 'bin/sleepmetrics.js', 'sleepmetrics.d.ts')
 $packMissing = @($need | Where-Object { $pack -notmatch [regex]::Escape($_) })
 Check 'A5 发布物内容' ($packMissing.Count -eq 0) "$pFiles 文件 / $pSize；缺 $(($packMissing -join ','))"
 
@@ -91,6 +91,18 @@ if ($rscript -and (Test-Path $rec)) {
 #     "文件都在、一 import 就崩"（exports 映射写错、漏了 src 里被 import 的模块）只有**真装一次**才知道。
 node scripts\pack-smoke.mjs > $null 2>&1
 Check 'A10 打包安装 smoke' ($LASTEXITCODE -eq 0) 'tarball → 干净目录安装 → import → 算一条最小结果'
+
+# A11 类型声明门 —— 手写的 sleepmetrics.d.ts 必须与真实导出**一字不差**，且 test/types/ 能编译
+#     （正向用例要过，反向用例靠 @ts-expect-error 自证"类型真的在拦错"）。
+#     ⚠️ 本机没装 TypeScript 时它是 **SKIP，不是通过** —— 与 A9 的 R 交叉同一规矩：
+#        「没跑」和「跑过了」必须看得出来是两件事。
+$typeOut = node scripts\check-types.mjs 2>&1 | Out-String
+$typeCode = $LASTEXITCODE
+Check 'A11 类型声明门' ($typeCode -eq 0) $(if ($typeCode -eq 2) {
+  'SKIP：本机没找到 tsc —— 装 typescript 或设 SLEEPMETRICS_TSC 后重跑'
+} else {
+  (($typeOut.Trim() -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 1) -replace '^\[types\] ', '')
+})
 Pop-Location
 
 Write-Host "=== B. 本机侧（mifit） ===" -ForegroundColor Cyan

@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "sleepmetrics": ["../../sleepmetrics.d.ts"]
+    }
+  },
+  "include": ["usage.ts", "expect-error.ts"]
+}

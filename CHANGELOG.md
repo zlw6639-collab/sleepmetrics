@@ -12,6 +12,86 @@ All notable changes to this project are documented here. The format follows
 > **synthetic anchors** have — `0.2.0` deliberately moved the synthetic IS anchor `0.7588 → 0.4228`
 > when the missing overall-mean centring was fixed. Each release below says which of the two it touched.
 
+## [0.4.0] — 2026-10-16
+
+> **No number moved.** The regression anchors **74.108 / 65.972 / 86.03** and every synthetic anchor are
+> identical to `0.3.1`. `src/` was touched, but **only in comments** — no statement in any module
+> changed, which the anchors and all 12 test files confirm. What this adds is a **published surface**
+> (types) plus the mechanical check that keeps it honest.
+
+### Added
+
+- **★ Hand-written type declarations — `sleepmetrics.d.ts`.** First-class TypeScript support with **no
+  build chain**: the file is source, shipped in the tarball like everything else, and nothing generates
+  it. `types` and a `types` condition in `exports` point at it, so consumers need no configuration and
+  no `allowJs`.
+  - **They were written field by field off the implementation and its tests**, deliberately: a wrong
+    declaration is worse than none. `suggest()`'s return shape (the one that had to be read out of the
+    code rather than guessed) is a **discriminated union**, as are `PhaseResult` and `NudgeDecision` —
+    `if (r.insufficient)` narrows, so the other fields are absent in the type *and* at runtime.
+  - **`Record` keeps its typedef name** even though it shadows the built-in `Record<K, V>`; the README
+    documents the rename-on-import escape hatch.
+  - ⚠️ The declarations follow **the code, not the prose** — and the field-by-field pass is what
+    surfaced the drifted descriptions listed under *Fixed* below.
+- **`scripts/check-types.mjs` — the type gate**, wired into `verify-all.ps1`. It requires that the
+  declared **value** exports match the real module **name for name** (a missing name means consumers get
+  no type; an extra one means the types promise something that does not exist at runtime), that every
+  `@typedef` in `src/` is mirrored, and that `test/types/` compiles — with `@ts-expect-error` reverse
+  cases that must **still** be errors, so a declaration that widens turns the gate red. Non-empty guards
+  throughout (`AGENTS.md` 6), and **a missing compiler is a SKIP, not a pass**.
+- **★ `sleepmetrics heatmap <records.json> [--window N]`** — a bedtime heatmap for the CLI: one character
+  per night, one row per week, so **drift is visible at a glance** instead of inferred from a number.
+  - The mapping lives in **`bin/heatmap.js`** (pure functions) rather than in the top-level script, so
+    `test/heatmap.test.js` can actually assert it — `bin/sleepmetrics.js` executes on import and cannot
+    be imported, and *"the picture looked fine"* is not a specification.
+  - ⚠️ **The recorded design trap was real and is now pinned by a test**: bedtimes wrap past midnight, so
+    the offset is relative to the **window's circular mean** (`circDiff()`, the shorter convention) and
+    never linear onto 00:00–24:00. 23:50 and 00:10 must land in the **same** level — a linear scale would
+    separate them by the whole ruler while they are 20 minutes apart.
+  - **Missing nights get their own character** (`?`): folding them into the centre level would read as
+    "slept right on time". The window anchor is the **last main sleep's wake** — the same one
+    `sriLastN()` uses, so there is one anchor rather than two.
+  - It **refuses `--json` visibly** rather than ignoring it: the `--json` key sets are a machine contract
+    (`AGENTS.md` 4) and they stay clean, while a silent no-op would let a script author believe they got
+    JSON.
+
+### Fixed
+
+- **★ Seven places where the prose had drifted from the code** (2026-10-16). Writing the `.d.ts` field by
+  field is what surfaced them, and they are the failure mode this project keeps meeting: the
+  implementation changed, a *description* did not, and **no assertion can see a sentence**. All seven now
+  say what the code does. **None of them moves a number** — every change is a comment or a document.
+  - **`AuditIssue.stageIndex` never existed.** `src/audit.js` documented the segment index as
+    `stageIndex`, while every rule fills **`stage`** (`{ index, stage }`). The claimed name occurred
+    **nowhere else in the repository** — it was never assigned, so a reader following the doc would get
+    `undefined`.
+  - **`LOOResult.base` never existed.** The implementation returns **`sri`** (and `bin/sleepmetrics.js`
+    reads `sri`), in the same sense as `SRIResult.sri`. It is also **`number | null`**, not `number` —
+    `null` when no calendar-adjacent valid pair survives.
+  - **`AuditSummary.ok` was described as `error`-only.** It is
+    `bySeverity.error === 0 && bySeverity.warn === 0`, so **a single `warn` makes it `false`**. Both
+    readings are "stricter than nothing", but the description and the code have to say the same thing.
+  - **`buildGrid()` returns `null` for a non-array input** — the JSDoc declared only
+    `Map<string, Uint8Array>`, so a typed consumer would reach for `.get()` on `null`. That is exactly
+    the "plausible-looking wrong thing" this library refuses elsewhere.
+  - **`AuditIssue.ds` is documented but never filled.** No rule currently sets it; the typedef now says
+    so instead of implying it is there.
+  - **README: "passing something that is not an array at all *does* throw a `TypeError`"** — it has not
+    behaved that way since 2026-10-14, when the non-array handling was unified to `[]` (array-returning
+    functions), `null` (object/number-returning ones) and an `input.not-array` **error** from
+    `auditRecords()`. The README now states that, **and** states what does throw: a bad *option*
+    (`tz` outside `[−12, +14]` hours), loudly and from every entry point that takes one.
+  - **`DISCLAIMER` was claimed on "every advisory return value."** `nudgeDecision()` has never carried
+    one. `src/disclaimer.js` and the README API table now say it is **deliberately excluded**, with the
+    reason — a gate verdict answers *"should the reminder fire"*, it is not advice about your sleep —
+    rather than promising a field that is `undefined` at runtime.
+
+### Documentation
+
+- **README** gained a `### TypeScript` section: what ships, the two things that surprise people
+  (discriminated unions, `Record` shadowing), and how the declarations are checked.
+- **ROADMAP**: the type-declarations item moved from *Next* to *Done*.
+
 ## [0.3.1] — 2026-10-15
 
 > **No number moved — this is consistency repair only.** The regression anchors

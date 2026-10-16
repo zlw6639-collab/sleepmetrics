@@ -6,28 +6,6 @@ and the last section lists what will **not** happen.
 ## Next
 
 
-- [ ] **Hand-written type declarations (`sleepmetrics.d.ts`).**
-      JSDoc already gives editor IntelliSense, and TypeScript consumers can enable `allowJs` to get
-      types from it. A hand-written `.d.ts` is the next step for first-class TS support.
-      ⚠️ **It will be hand-written. This project will not grow a TypeScript build chain** — the
-      published artifact staying identical to the source you read is a design decision, not an
-      accident.
-      ✅ **Prerequisite done (2026-10-14): the typedefs now exist.** An external review found **zero**
-      `@typedef`s — JSDoc said only `Array<object>`, so the *standard record shape* lived in prose alone
-      and there was nothing concrete for a `.d.ts` to mirror. Now declared next to the code they
-      describe: `Record` / `Stage` / `NormalizedRecord` (records.js) · `SRIResult` / `LOOEntry` /
-      `LOOResult` (sri.js) · `PhaseResult` (phase.js) · `ISResult` / `IVResult` (rhythm.js) ·
-      `AuditIssue` / `AuditSummary` / `AuditResult` (audit.js) · `CircStats` (time.js) ·
-      `RestJudge` (rest.js).
-      ⚠️ **Still deliberately untyped: `suggest()`'s return shape** — its fields have to be read off the
-      implementation and its tests, not guessed. A wrong typedef is worse than none. Do that in the
-      `.d.ts` pass, field by field.
-- [ ] **ASCII bedtime heatmap for the CLI.** One character per night — rows = weeks, columns = days —
-      so drift is visible at a glance instead of inferred from a number.
-      ⚠️ **Design trap**: bedtimes wrap past midnight, so map them **circularly** (relative to the
-      window's circular mean), **not linearly onto 00:00–24:00** — otherwise 23:50 and 00:10 land at
-      opposite ends of the scale despite being 20 minutes apart. Missing nights need their own
-      character, and this stays on the human-readable path only (`--json` stays clean).
 - [ ] **Confidence intervals for SRI (bootstrap).** A single number invites false precision,
       especially at n = 7 nights.
       ⚠️⚠️ **Statistical trap — never resample epochs.** Epochs within a night are strongly
@@ -157,6 +135,46 @@ and the last section lists what will **not** happen.
       holds while SRI falls. It imports the real library from a CDN (zero build) and uses **synthetic
       data only** (the page is public) — with **computed** values throughout; the hand-drawn prototype
       it came from had one of its five points off by 0.32.
+- [x] **Hand-written type declarations (`sleepmetrics.d.ts`)** (2026-10-16). First-class TypeScript
+      support with **no build chain**: the file is source, exactly like the rest of the tarball, and
+      nothing generates it (`RELEASE.md` §6). `types` plus a `types` condition in the `exports` map point
+      at it, so `import { computeSRI } from 'sleepmetrics'` is typed with **no configuration and no
+      `allowJs`**.
+      ⚠️ **Written field by field off the implementation and its tests** — a wrong declaration is worse
+      than none, so `suggest()`'s return shape was read out of the code rather than guessed. That pass is
+      also what makes the prose drift visible: the audit issue's segment index is really **`stage`**
+      (the typedef said `stageIndex` — a name that occurs nowhere else in the repo), `LOOResult` carries
+      **`sri`** (not `base`), `AuditSummary.ok` is `false` on a **`warn`** too (not only on an `error`),
+      and `buildGrid()` returns **`null`** for a non-array input (the JSDoc said `Map`). The declarations
+      follow **the code**, and every divergence is flagged in place rather than smoothed over.
+      ✅ **Two decisions worth keeping:**
+      · **Discriminated unions wherever "not enough data" is possible** — `PhaseResult` / `SuggestResult`
+        / `NudgeDecision`. `if (r.insufficient)` really narrows, so the other fields are absent in the
+        type *and* at runtime; "optional" would invite reading `undefined` as a number.
+      · **`Record` keeps its typedef name** even though it shadows the built-in `Record<K, V>` — the
+        README documents the rename-on-import escape hatch instead of renaming the library's most
+        important shape.
+      ✅ **Checked mechanically, not by trust:** `scripts/check-types.mjs` (wired into `verify-all.ps1`)
+      compares the declared **value** exports against the real module **name for name**, requires every
+      `@typedef` in `src/` to be mirrored, and compiles `test/types/` — whose reverse cases are
+      `@ts-expect-error` lines that must **still** be errors (widen a declaration and they become unused
+      directives ⇒ red). A missing compiler is a **SKIP, not a pass**.
+- [x] **ASCII bedtime heatmap for the CLI** (2026-10-16). `sleepmetrics heatmap <records.json>
+      [--window N]` — one character per night, one row per week, so **drift is visible at a glance**
+      instead of inferred from a number.
+      ✅ **The mapping lives in `bin/heatmap.js`, not in the top-level script, so it can be tested**:
+      `bin/sleepmetrics.js` executes on import and cannot be imported, and *"the picture looked fine"*
+      is not a specification.
+      ⚠️ **The recorded trap was the whole reason for that split.** Bedtimes wrap past midnight, so the
+      offset is measured **relative to the window's circular mean** via `circDiff()` (shorter
+      convention) — never linearly onto 00:00–24:00. The guard is a **test**, not a comment: 23:50 and
+      00:10 must land in the **same** level. A linear scale would place them at opposite ends of the
+      ruler while they are 20 minutes apart, inventing a regime change that never happened.
+      ✅ Three further decisions: **missing nights get their own character** (`?`) — folding them into
+      the centre level would read as "slept right on time"; the window anchor is the **last main
+      sleep's wake**, the same one `sriLastN()` uses (one anchor, not two); and the command **refuses
+      `--json` visibly** instead of ignoring it, because `--json`'s key set is a machine contract
+      (`AGENTS.md` 4) and a silent no-op would let a script author believe they got JSON.
 
 ## Later / on demand
 

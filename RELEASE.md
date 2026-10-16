@@ -14,13 +14,18 @@ steps are portable.
 > ```powershell
 > pwsh -File scripts\verify-all.ps1
 > ```
-> It covers 19 items — syntax gate · all 12 test files · the regression anchors · README links ·
+> It covers 20 items — syntax gate · all 13 test files · the regression anchors · README links ·
 > published-tarball contents · the `--json` contract (key set must not change) · zero dependencies and
 > no IO imports in `src/` · both `examples/` scripts · the **R cross-check against `mctq`** ·
 > **a pack-and-install smoke test** (tarball → clean dir → install → import → compute a minimal result)
-> · the local `analyze` / `report` / `rhythm` / `datacheck` scripts and the nudge gate · doc-tree hash
-> parity · git cleanliness and tag. Anything **FAIL** must be fixed or explained before publishing —
-> the anchors are a hard gate, there is no "close enough".
+> · the **hand-written type declarations** (declared exports compared name-for-name against the real
+> module, and `test/types/` compiled) · the local `analyze` / `report` / `rhythm` / `datacheck` scripts
+> and the nudge gate · doc-tree hash parity · git cleanliness and tag. Anything **FAIL** must be fixed
+> or explained before publishing — the anchors are a hard gate, there is no "close enough".
+>
+> ⚠️ **A11 needs a TypeScript compiler on the machine; without one it reports SKIP and counts as FAIL.**
+> The library itself never depends on one (`dependencies` stays `{}`) — point `SLEEPMETRICS_TSC` at any
+> `typescript/bin/tsc` if there is no global install.
 >
 > The steps below are the individual pieces, for when one item fails and you need to dig in.
 
@@ -29,7 +34,7 @@ steps are portable.
 node --check bin\sleepmetrics.js
 
 # b) tests, one file at a time (batch `node --test test/` may hit EPERM in a sandbox)
-foreach ($f in 'time','records','contract','sri','phase','rest','suggest','audit','rhythm','aside-guard','anchor-synthetic','regression') {
+foreach ($f in 'time','records','contract','sri','phase','rest','suggest','audit','rhythm','heatmap','aside-guard','anchor-synthetic','regression') {
   node "test\$f.test.js" | Select-String 'pass |fail '
 }
 
@@ -180,7 +185,9 @@ npm publish
 - **no dependencies** — `dependencies` stays `{}` (adding one is a design change, not a release step)
 - **no postinstall** — never
 - **no telemetry** — never
-- **no `.d.ts` build chain** — if types ever ship, they are hand-written (see `ROADMAP.md`)
+- **no `.d.ts` build chain** — the types that ship are **hand-written source** (`sleepmetrics.d.ts`,
+  listed in `files` like everything else). `scripts/check-types.mjs` only **verifies** them: declared
+  exports vs the real module, and `test/types/` compiled (see `ROADMAP.md`). No generator, ever.
 
 ## 7. If something goes wrong
 

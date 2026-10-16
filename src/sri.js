@@ -99,7 +99,9 @@ const LOCK_TZ = 8;
  * 有 `stages` 就逐段标（state === 5 记「醒」）；没有（或一段有效的都没有）就把整段按「睡」标。
  * @param {Array<object>} records 规范化后的记录（含 bed/wake/stages）
  * @param {number} [tz] 参考时区；缺省时**从记录的 `tz` 推断**（见 `gridTz` 的口径说明）
- * @returns {Map<string, Uint8Array>} 自然日 → 1440 长度序列
+ * @returns {Map<string, Uint8Array>|null} 自然日 → 1440 长度序列；**非数组输入 ⇒ `null`**（不猜）
+ *   ⚠️ **2026-10-16 修**：原来这里只写了 `Map`，漏了 `null` —— 逐字段写 `.d.ts` 时发现。
+ *      类型里漏掉它，调用方就会在 `null` 上取 `.get()`（而本库最反对「看着像数/像对象」的胡说值）。
  */
 export function buildGrid(records, tz) {
   if (!Array.isArray(records)) return null;   // 非数组 ⇒ 不猜（原来是 `records ?? []`，传数字会抛 not iterable）
@@ -230,7 +232,9 @@ const sriOf = (same, pairCount) => (pairCount ? -100 + (200 * same) / (pairCount
 /**
  * `sriLeaveOneOut()` 的返回。
  * @typedef {object} LOOResult
- * @property {number} base 基准 SRI
+ * @property {number|null} sri 基准 SRI
+ *   ⚠️ **2026-10-16 修**：这里原写作 `base`，而实现返回的字段是 `sri`（`bin/sleepmetrics.js` 也按
+ *      `sri` 读）。与 `SRIResult.sri` 同一口径 —— 没有「相邻且有效」的天对时为 `null`。
  * @property {number} days 有效天数
  * @property {number} pairs 天对数
  * @property {Array<LOOEntry>} out 逐日影响度（按日期升序）

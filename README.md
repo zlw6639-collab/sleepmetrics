@@ -222,7 +222,7 @@ changes on its own schedule.
 | `normalize(records, tz)` · `buildGrid(records, tz)` | the normalizer, and the per-day 24 h grid the metric functions are built on — exported for inspection |
 | `dowOf(ds)` · `isWeekend(ds)` · `mod(x, m)` · `avg(a)` · `normalizeNight(m)` · `SEC_PER_DAY` · `MIN_PER_DAY` | lower-level helpers and constants |
 | `DEFAULT_TARGET_MINUTES` · `DEFAULT_LATENCY_MINUTES` · `NIGHT_START_MINUTES` · `NIGHT_END_MINUTES` · `LATE_MINUTES` | the defaults `suggest()` / `nudgeDecision()` use — override them per call |
-| `DISCLAIMER` | the disclaimer string every advisory return value carries — **pass it through to your user** |
+| `DISCLAIMER` | the disclaimer string the **advisory** return values carry — `suggest()` (both branches) and `compareChronotype()`. **Pass it through to your user.** `nudgeDecision()` deliberately does *not* carry one: it answers *"should tonight's reminder fire"*, which is not advice about your sleep |
 
 > **Stability, stated honestly:** the rows above the helpers are the API. The last three rows are
 > *exported internals* — handy to reuse, but they may change in a minor release without ceremony.
@@ -239,9 +239,42 @@ changes on its own schedule.
 
 **Two failure modes, deliberately different.** Dirty elements *inside* an array never throw — missing
 fields, `NaN`, millisecond timestamps, `null` slots, a `tz` of `"xx"`, a `dur` of `"abc"` are skipped
-or reported, and the metrics degrade to `null` instead of blowing up. But passing something that is
-**not an array at all** (`42`, a plain object) *does* throw a `TypeError`: `null` / `undefined` mean
-"no data" and yield `[]`, whereas a number is a bug in the calling code — and type errors should be loud.
+or reported, and the metrics degrade to `null` instead of blowing up. Passing something that is **not an
+array at all** does not throw either: `null` / `undefined` / `42` / a plain object all mean "no data", so
+functions that return arrays give `[]`, functions that return objects or numbers give `null`, and
+`auditRecords()` — the one entry point whose whole job is to stay standing while the data is wrong —
+reports an `input.not-array` **error** in the usual report.
+
+What **does** throw is a bad *option*, not bad data: a `tz` outside `[−12, +14]` hours raises a
+`TypeError` from every entry point that takes one. Configuration errors are loud on purpose — silently
+falling back would compute in a different timezone, and a report whose dates all shifted by a day fails
+no assertion at all.
+
+### TypeScript
+
+Types ship with the package — **hand-written** (`sleepmetrics.d.ts`), not generated. There is no build
+step here and the published artifact stays the source you read (`ROADMAP.md`); `types` and a `types`
+condition in `exports` both point at that file, so `import { computeSRI } from 'sleepmetrics'` is typed
+with **no configuration and no `allowJs`**.
+
+Two things worth knowing before you lean on them:
+
+- **The returns that can mean "not enough data" are discriminated unions** — `PhaseResult`,
+  `SuggestResult` and `NudgeDecision`. `if (result.insufficient)` really narrows: in that branch the
+  other fields are absent in the type *and* at runtime, because an "optional" field invites reading
+  `undefined` as a number.
+- **`Record` is this library's record shape, and it shadows the built-in `Record<K, V>`.** If you need
+  both in one file, rename on import:
+
+  ```ts
+  import type { Record as SleepRecord } from 'sleepmetrics'
+  ```
+
+The declarations are **checked mechanically** rather than trusted: `scripts/check-types.mjs` (run by
+`verify-all.ps1`) compares the declared exports against the real module name for name, requires every
+`@typedef` in `src/` to be mirrored, and compiles `test/types/` — where the reverse cases are
+`@ts-expect-error` lines that must *still* be errors. A declaration that drifts goes red there instead
+of quietly misleading you in an editor.
 
 ### `isRest` is *yours* to define
 
@@ -432,13 +465,22 @@ When real demand shows up, the answer is a **hand-written `.d.ts`**, never a bui
 ```bash
 node bin/sleepmetrics.js sri   records.json --window 7
 node bin/sleepmetrics.js phase records.json --free-days my-days.json   # --holidays is an alias
+node bin/sleepmetrics.js heatmap records.json --window 30              # bedtime drift, one char per night
 ```
 
 `--free-days` is the flag that answers "what counts as a free day for *me*" — see
 [`isRest` is yours to define](#isrest-is-yours-to-define). If the file you pass marks a suspicious share
 of days as free (or hardly any), the CLI says so instead of printing numbers that quietly mean nothing.
 
-Add `--json` for machine-readable output.
+**`heatmap` is the one that shows *drift* instead of a number** — one character per night, one row per
+week. Each character is that night's bedtime as an offset from the **window's circular mean**
+(`«` = 90 minutes or more *earlier* … `»` = 90 minutes or more *later*, `·` = within ±30 minutes,
+`?` = no main sleep that night). Circular is the only way this can work: bedtimes wrap past midnight, so a
+linear 00:00–24:00 scale would put 23:50 and 00:10 at **opposite ends of the ruler** while they are 20
+minutes apart — inventing a regime change that never happened. It has **no `--json` on purpose**: it is a
+picture for a person, and the `--json` key sets are a machine contract.
+
+Add `--json` for machine-readable output (`sri`, `phase`, `audit`).
 
 ## Three read-only companions
 

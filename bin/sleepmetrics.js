@@ -16,6 +16,7 @@ import {
   allSleep, mainSleep, computeSRI, sriLastN, sriLeaveOneOut, computePhase, makeRestJudge, minToClock,
   dailyMain, circMean, circDiff, clockMin, dayOf, auditRecords,
 } from '../src/index.js';
+import { buildHeatmap, renderHeatmap } from './heatmap.js';
 
 const USAGE = `sleepmetrics —— 标准睡眠指标（纯 JS，零依赖）
 
@@ -23,6 +24,7 @@ const USAGE = `sleepmetrics —— 标准睡眠指标（纯 JS，零依赖）
   sleepmetrics sri   <records.json> [--window N] [--min-day-minutes N] [--influence] [--json]
   sleepmetrics phase <records.json> [--window N] [--free-days <表.json>] [--json]
   sleepmetrics audit <records.json> [--json]
+  sleepmetrics heatmap <records.json> [--window N]
   sleepmetrics --help ｜ --version
 
 audit 先跑它：脏数据**不会报错**，只会让指标给出看着正常的错数字。
@@ -37,6 +39,10 @@ audit 先跑它：脏数据**不会报错**，只会让指标给出看着正常�
 
 说明：
   sri    睡眠规律性指数（Phillips 2017）。不加 --window 即全量；--window 7 = 近 7 晚。
+  heatmap  就寝热图：一晚一格、一周一行 —— 「作息在漂移吗」一眼可读。
+           中心取窗口内的**圆周均值**，字符是相对它的偏移（就寝跨午夜，所以只能按圆周量，
+           不能线性铺到 00:00–24:00 —— 否则 23:50 与 00:10 会被画到标尺两端）。
+           它只有人类可读输出（--json 不适用）：那是给人看的一张图，不是机器契约。
   phase  睡眠相位与社交时差（Roenneberg）。需要 --holidays 才能区分工作日/休息日。
   --influence  逐日影响度：去掉某一晚之后 SRI 会变成多少。
                小窗口上最有诊断力（近 7 晚时一晚能值 ±11 分，全量 85 天时不到 ±1 分）。
@@ -314,7 +320,7 @@ if (args.errors.length) {
   console.error('[sleepmetrics] 已停止（**不会**用默认值继续算）—— 用 --help 看用法。');
   process.exit(1);
 }
-if (!args.file || !['sri', 'phase', 'audit'].includes(args.cmd)) {
+if (!args.file || !['sri', 'phase', 'audit', 'heatmap'].includes(args.cmd)) {
   console.log(USAGE);
   process.exit(1);
 }
@@ -372,6 +378,20 @@ if (args.cmd === 'audit') {
       : (summary.bySeverity.warn > 0 ? '结论：能算，但有 warn 值得看一眼。' : '结论：数据可用。'));
   }
   if (summary.bySeverity.error > 0) process.exit(1);
+} else if (args.cmd === 'heatmap') {
+  // ⚠️ 热图**只走人类可读路径**（`AGENTS.md` 硬规矩 4：`--json` 的键集合是机器契约）。
+  //    而且是**可见的**拒绝，不是静默忽略 —— 静默会让写脚本的人以为自己拿到了 JSON。
+  if (args.json) {
+    console.error('[sleepmetrics] heatmap 只有人类可读输出：--json 的键集合是机器契约，'
+      + '不往里加花样（它就是给人看的一张图）。');
+    process.exit(1);
+  }
+  const hm = buildHeatmap(records, { window: args.window });
+  if (hm.nights === 0 || hm.center === null) {
+    console.error('[sleepmetrics] 数据不足：窗口内没有主睡眠记录（>180 分钟），画不出就寝热图');
+    process.exit(2);
+  }
+  for (const line of renderHeatmap(hm)) console.log(line);
 } else if (args.cmd === 'sri') {
   const r = args.window ? sriLastN(all, main, args.window, { minDayMinutes: args.minDayMinutes })
     : computeSRI(all, { minDayMinutes: args.minDayMinutes });

@@ -47,8 +47,11 @@ const RECORD_FAULT = {
  * @property {'error'|'warn'|'info'} severity `error` ⇒ 先修数据再算指标
  * @property {string} message 人话描述
  * @property {number} [index] 相关记录下标
- * @property {number} [stageIndex] 相关分段下标
+ * @property {number} [stage] 相关分段下标
+ *   ⚠️ **2026-10-16 修**：这里原写作 `stageIndex`，而实现填的是 `stage`（`{ index, stage }`）——
+ *      `stageIndex` 在整个仓库里只出现在那一行注释里，从来没有被赋值过。逐字段写 `.d.ts` 时发现。
  * @property {string} [ds] 相关自然日（`YYYY-MM-DD`）
+ *   ⚠️ **当前实现还没有任何规则填过它**（保留字段形状，但别假设读得到）
  */
 
 /**
@@ -58,7 +61,10 @@ const RECORD_FAULT = {
  * @property {number} days 覆盖的自然日数
  * @property {number} daysWithoutMainSleep 缺主睡眠的天数
  * @property {{error: number, warn: number, info: number}} bySeverity
- * @property {boolean} ok `false` = 有 `error` 级问题
+ * @property {boolean} ok `error` 与 `warn` **都为 0** 才是 `true`（`info` 不影响）
+ *   ⚠️ **2026-10-16 修**：这里原写作「`false` = 有 `error` 级问题」，而实现是
+ *      `bySeverity.error === 0 && bySeverity.warn === 0` —— **一条 `warn` 也会让它变 `false`**。
+ *      逐字段写 `.d.ts` 时发现（两者都是"更严"，但描述与代码必须说同一件事）。
  */
 
 /**

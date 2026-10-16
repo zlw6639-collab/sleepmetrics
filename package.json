@@ -1,6 +1,6 @@
 {
   "name": "sleepmetrics",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Standard sleep metrics in pure JavaScript: sleep regularity index (SRI) and circadian phase (MSFsc / social jetlag). Zero dependencies, no build step, no network, no filesystem.",
   "type": "module",
   "license": "MIT",
@@ -14,8 +14,12 @@
     "url": "https://github.com/zlw6639-collab/sleepmetrics/issues"
   },
   "main": "src/index.js",
+  "types": "./sleepmetrics.d.ts",
   "exports": {
-    ".": "./src/index.js",
+    ".": {
+      "types": "./sleepmetrics.d.ts",
+      "default": "./src/index.js"
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -23,6 +27,7 @@
     "sleepmetrics": "bin/sleepmetrics.js"
   },
   "files": [
+    "sleepmetrics.d.ts",
     "src",
     "data",
     "bin",
