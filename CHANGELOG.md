@@ -161,6 +161,15 @@ All notable changes to this project are documented here. The format follows
   would imply the function is one.
 - `scripts/verify-all.ps1`: A2 runs `test/bootstrap.test.js` (**14** test files), and **A6b** was added to
   pin the `--ci` key set from the other side (see above).
+- `scripts/verify-all.ps1` **now returns an exit code** (2026-10-16). It used to print
+  `❌ 3/21 项失败` and still exit **0** — the script contained **no `exit` statement at all** — so nothing
+  automated could use it as a gate, and a "gate" nothing can read is not a gate. It now returns **1**
+  whenever any item fails and **0** only when every item passes.
+  - ⚠️ **`SKIP` counts as a failure**, matching `RELEASE.md` §1: with no TypeScript compiler on the
+    machine A11 reports SKIP, and letting that pass would delete the gate rather than satisfy it.
+    `Check()` consequently produces only PASS / FAIL — SKIP is passed in as a failure.
+  - Known **"expected red"** states, which are *supposed* to fail: `C2a` (uncommitted changes) and
+    `C2b` (local ahead of origin). Both must be green before publishing; neither is a false positive.
 
 ## [0.3.1] — 2026-10-15
 

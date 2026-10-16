@@ -170,3 +170,15 @@ if ($bad.Count -eq 0) {
   Write-Host "❌ $($bad.Count)/$($results.Count) 项失败：" -ForegroundColor Red
   $bad | ForEach-Object { Write-Host ("   - " + $_.项目 + "  " + $_.说明) -ForegroundColor Red }
 }
+
+# ★ 退出码（2026-10-16 加 · 使用者提出的边界）：本脚本长期是"给人看"的 ——
+#   报 ❌ 3/21 项失败却仍 **exit 0**，于是**自动化 / CI 拿它当门就会假绿**，
+#   门本身无法被机械判定（对照 `检查关键数字.ps1`：那里的退出码就是结论）。
+# ⚠️ 口径（与 `RELEASE.md` §1 一致，别放宽）：
+#   · **SKIP 也算失败** —— 本机没装 tsc 时 A11 报 SKIP；若它不计入失败，那道门就等于不存在。
+#     `Check()` 因此只产 PASS / FAIL 两种结果，SKIP 是以 `$ok = $false` 传进去的（见 A11 那段注释）。
+#   · **只有 `$bad.Count -eq 0` 才返回 0**；任何一项 FAIL 都返回 1。
+#   · 已知会让它变红的"预期状态"：`C2a 工作区干净`（有未提交改动）与 `C2b 与远端同步`
+#     （本地领先远端、还没 push）—— 那**正是它们该报的**，不是误报；发布前这两项必须是绿的。
+if ($bad.Count -gt 0) { exit 1 }
+exit 0
