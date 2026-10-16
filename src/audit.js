@@ -25,6 +25,33 @@ const MILLISECOND_THRESHOLD = 1e11;
 /** 本库认识的 stages.state 编码 */
 const KNOWN_STATES = new Set([2, 3, 4, 5]);
 
+/* ─────────────── ★ ghost-segment（2026-10-16 · ROADMAP Next 第 1 条）───────────────
+ *
+ * 要抓的是「**不像是一次独立睡眠**」的段。判据**刻意不靠时长** —— 真实数据实测
+ * （286 条 / 215 个醒来日）：一份 20 分钟的真小睡与一份"午夜拆分残留"在**时长上完全无法区分**。
+ * 能区分它们的是**与邻居的时间关系**，所以本模块用两条**互为反面**的规则：
+ *   · `records.ghost-fragment` —— 两段之间只清醒几分钟 ⇒ 更像**同一次睡眠被拆成两段**；
+ *   · `records.ghost-overlap`  —— 两段重叠很大 ⇒ 不可能都是各自独立的睡眠。
+ *
+ * ⚠️ **反面同样重要**：真实数据里 61 天有 2 段、5 天有 3 段，而它们的段间清醒都是**数小时**
+ *   （典型的下午小睡形态）⇒ 一条都不该报。这条规则的**假阳性**恰恰是它最容易犯的错，
+ *   而合成夹具 `withAfternoonNap()` 与真实数据都用来钉住这一点。
+ */
+
+/**
+ * 两段之间**清醒**不足这个分钟数 ⇒ 判为「同一次睡眠被拆开」。
+ * ★ 依据（2026-10-16 在真实数据上实测：286 条 / 215 个醒来日，其中 **66 天是多段**）：
+ *   · 真实数据里相邻段的**最小正间隔 = 70 分钟** ⇒ 取 30 分钟有 **40 分钟的安全边际**；
+ *   · "清醒 < 30 分钟"的正样本**一个都没有** ⇒ 本机假阳性 **0**。
+ * ⚠️ 因此这个值**不是被真实数据"调"出来的**（正样本为 0，调不了）—— 它是**语义取值 + 实测边际**：
+ *   宁可只在明显拆分时开口，也不去猜一份 20 分钟的记录到底是小睡还是午夜残留。
+ *   ⇒ 它实际上是**为"会拆午夜的数据源"准备的**：本机数据源不拆，所以它在本机长期命中 0。
+ */
+const GHOST_GAP_MINUTES = 30;
+
+/** 同夜两段的重叠 ≥ **较短那段**的这个比例 ⇒ 两段不可能是各自独立的睡眠 */
+const GHOST_OVERLAP_RATIO = 0.5;
+
 /**
  * `recordFaults()` 的规则标识 → 人话。见 `records.js` 里那个共享判据。
  * ⚠️ **全部是 `error`**：这些记录 `normalize()` 会直接丢掉 —— 体检若把它们标成 info / warn，
@@ -246,10 +273,32 @@ export function auditRecords(records, opts = {}) {
     push('tz.mixed', 'warn', `记录里出现 ${tzSet.size} 种 tz（${[...tzSet].join(', ')}）—— 若这是有意的（跨时区旅行）可以忽略`);
   }
 
+  // ★ ghost-segment：判据是**与邻居的时间关系**，不是时长（理由见文件顶部常量处的注释）。
+  // ⚠️ 同一对记录**只报一条**：重叠显著时报更具体的 `ghost-overlap`，否则退回泛化的 `overlap` ——
+  //    两条都报就成了"同一件事说两遍"，而 `--json` 的消费者会以为发现了两个问题。
+  // ⚠️ 顺序是语义：`sorted` 按 bed 升序，所以 `prev` 是较早那段。
   const sorted = [...norm].sort((a, b) => a.bed - b.bed);
   for (let k = 1; k < sorted.length; k += 1) {
-    if (sorted[k].bed < sorted[k - 1].wake) {
-      push('records.overlap', 'warn', `第 ${sorted[k].index} 条与第 ${sorted[k - 1].index} 条的时段重叠`, { index: sorted[k].index });
+    const prev = sorted[k - 1];
+    const cur = sorted[k];
+    const overlapMin = (prev.wake - cur.bed) / 60;   // > 0 ⇒ 两段重叠
+    const gapMin = (cur.bed - prev.wake) / 60;       // > 0 ⇒ 中间有清醒
+    if (overlapMin > 0) {
+      const shorter = Math.min(cur.dur, prev.dur);
+      if (overlapMin >= shorter * GHOST_OVERLAP_RATIO) {
+        push('records.ghost-overlap', 'warn',
+          `第 ${prev.index} 条与第 ${cur.index} 条**重叠 ${overlapMin.toFixed(0)} 分钟**`
+          + `（较短那条全长才 ${shorter.toFixed(0)} 分钟）—— 两段不可能是各自独立的一次睡眠`
+          + '（多半是同一次睡眠被导出了两遍，或其中一条的边界错了）', { index: cur.index });
+      } else {
+        push('records.overlap', 'warn', `第 ${cur.index} 条与第 ${prev.index} 条的时段重叠`, { index: cur.index });
+      }
+    } else if (gapMin < GHOST_GAP_MINUTES) {
+      push('records.ghost-fragment', 'warn',
+        `第 ${prev.index} 条与第 ${cur.index} 条之间**只清醒 ${gapMin.toFixed(0)} 分钟**`
+        + `（< ${GHOST_GAP_MINUTES}）—— 更像是**同一次睡眠被拆成了两段**，而不是两次独立睡眠。`
+        + '⚠️ 两种解释都在：若是"醒来又很快睡回去"且你确实想记成两段，请忽略；'
+        + '否则建议合并成一条 —— 不合并的话，SRI 会把这一夜当成"睡了两觉"来比对。', { index: cur.index });
     }
   }
 

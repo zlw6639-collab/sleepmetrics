@@ -524,7 +524,7 @@ export type AuditSeverity = 'error' | 'warn' | 'info';
 
 /** 体检出的一条问题。 */
 export interface AuditIssue {
-  /** 规则标识（如 `records.overlap`、`tz.out-of-range`、`stages.no-awake`） */
+  /** 规则标识（如 `records.overlap`、`records.ghost-fragment`、`tz.out-of-range`、`stages.no-awake`） */
   ruleId: string;
   severity: AuditSeverity;
   /** 人话描述 */

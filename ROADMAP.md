@@ -6,14 +6,6 @@ and the last section lists what will **not** happen.
 ## Next
 
 
-- [ ] **Ghost-segment rules for `auditRecords()`** — flag sleep episodes that are not plausible
-      *standalone* episodes: fragments left behind by a midnight split, and impossible holes or
-      overlaps inside a night.
-      ⚠️ **The hard part is the criterion, not the code**: a 13-minute fragment from a midnight split
-      and a genuine 13-minute nap are **identical by duration alone**. So the rule has to lean on
-      **time adjacency** (a fragment that touches its neighbour) rather than on length. Any threshold
-      must be validated against real data for false positives — and real data never ships
-      (`test/fixtures/synthetic.mjs` only).
 - [ ] **Adapters** — generic JSON → CSV first; vendor formats only when somebody actually asks.
 - [ ] **A "write your own adapter with a local AI" prompt template** (2026-10-14).
       Vendor exports are frequently **gigabytes** — far too large to paste into a web chat — while a

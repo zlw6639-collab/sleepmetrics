@@ -17,10 +17,11 @@ All notable changes to this project are documented here. The format follows
 > **No number moved.** The regression anchors **74.108 / 65.972 / 86.03** and every synthetic anchor are
 > identical to `0.3.1` — confirmed by the anchors and all **14** test files. This release adds a
 > **published surface**: hand-written types, a **`sriBootstrap()` entry point**, and the mechanical checks
-> that keep both honest.
-> ⚠️ Note that its two halves are **not the same kind of change**: the `.d.ts` pass touched `src/`
-> **only in comments**, while the bootstrap work **added code** (`src/bootstrap.js`, one new function in
-> `sri.js`, one export) — and still moved **no existing number**.
+> that keep both honest, plus **two new `auditRecords()` rules**.
+> ⚠️ Note that its parts are **not the same kind of change**: the `.d.ts` pass touched `src/`
+> **only in comments**, the bootstrap work **added code** (`src/bootstrap.js`, one new function in
+> `sri.js`, one export), and the ghost-segment rules **changed which `ruleId` an existing overlap is
+> reported under** — and still moved **no existing number** (the audit output feeds no metric).
 
 ### Added
 
@@ -89,6 +90,24 @@ All notable changes to this project are documented here. The format follows
   - It **refuses `--json` visibly** rather than ignoring it: the `--json` key sets are a machine contract
     (`AGENTS.md` 4) and they stay clean, while a silent no-op would let a script author believe they got
     JSON.
+- **★ Two `auditRecords()` ghost-segment rules — and the criterion they were planned with did not survive
+  contact with the data.** `records.ghost-overlap` (two segments overlapping by ≥ **half of the shorter
+  one**) and `records.ghost-fragment` (two segments separated by **less than 30 minutes** of wakefulness)
+  both key on **time adjacency, never on duration** — a 20-minute nap and a 20-minute midnight leftover are
+  indistinguishable by length alone. A heavy overlap is reported by the specific rule **instead of** the
+  generic `records.overlap`, so one pair of records never yields two issues.
+  - ⚠️ **The roadmap predicted "fragments left behind by a midnight split"; the data says otherwise.**
+    Measured on **286 records over 215 wake-days**: this source **does not split at midnight** (all **28**
+    cross-midnight segments are ≥ **76** minutes) and **no two segments are adjacent at all** (smallest
+    positive gap: **70 minutes**). The planned rule would have fired **zero times** — and could not have
+    been validated, which is exactly what the roadmap demanded of any threshold.
+  - ✅ **What the data does contain is the false-positive shape, so it became the negative sample:**
+    **66 nights** carry 2–3 segments whose gaps are **hours** (the afternoon-nap shape). Both rules fire
+    **0 times** across them; the dataset's **only** hit is a genuine one — a night whose two segments
+    overlapped by **409 minutes** (the shorter one is 47 minutes long).
+  - **The 30-minute cut is therefore not tuned** (there is no positive sample to tune against). It is a
+    semantic value with a **40-minute margin** to the smallest real gap. Real data stays on the machine:
+    that audit run is one-off, and `test/audit.test.js` pins every case — the negative ones included.
 
 ### Fixed
 

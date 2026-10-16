@@ -256,3 +256,73 @@ test('每条问题都带 ruleId + severity + 人类可读的 message（可机读
     assert.ok(it.message.length > 0);
   }
 });
+
+/* ─────────── ★ ghost-segment：判据是「与邻居的时间关系」，不是时长（2026-10-16）───────────
+ * 背景（真实数据实测 286 条 / 215 个醒来日）：20 分钟的真小睡与"午夜拆分残留"**时长上无法区分**；
+ * 真实数据里同夜多段有 61 天（2 段）、5 天（3 段），但段间清醒**全是数小时** ⇒ 一条都不该报。
+ * 所以本组测试的**负样本和正样本同等重要** —— 假阳性才是这条规则最容易犯的错。
+ */
+
+test('★ ghost-fragment：两段之间只清醒 20 分钟 ⇒ 更像是同一次睡眠被拆成两段', () => {
+  const r = auditRecords([
+    { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 5) },
+    { bed: fx.at(fx.d(1), 5, 20), wake: fx.at(fx.d(1), 9) }, // 中间只清醒 20 分钟
+  ]);
+  const hit = r.issues.find((x) => x.ruleId === 'records.ghost-fragment');
+  assert.ok(hit, `应当报 ghost-fragment，实际：${JSON.stringify(rules(r))}`);
+  assert.equal(hit.severity, 'warn');
+  // 这条规则只能"提示"不能"判决" ⇒ 必须同时保留「确实想记成两段」这种解释
+  assert.ok(hit.message.includes('请忽略'), '必须保留「确实想记成两段」这种解释');
+});
+
+test('★ ghost：紧贴的两段（上一段结束那一刻下一段开始）⇒ 是 ghost-fragment，不是 overlap', () => {
+  const r = auditRecords([
+    { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 5) },
+    { bed: fx.at(fx.d(1), 5), wake: fx.at(fx.d(1), 9) }, // gap = 0
+  ]);
+  assert.ok(rules(r).includes('records.ghost-fragment'));
+  assert.ok(!rules(r).includes('records.overlap'), '紧贴不是重叠：不许把 0 间隔说成 overlap');
+});
+
+test('★ ghost：真小睡形态（主睡眠 01–09 + 下午 14–15）⇒ 一条 ghost 都不许报', () => {
+  // 这是真实数据里最常见的形状（61 天 2 段），也是最容易被误伤的那一种
+  const r = auditRecords([
+    { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 9) },
+    { bed: fx.at(fx.d(1), 14), wake: fx.at(fx.d(1), 15) },
+  ]);
+  assert.ok(!rules(r).some((id) => id.startsWith('records.ghost')), `真小睡不该报 ghost：${JSON.stringify(rules(r))}`);
+  assert.equal(r.issues.length, 0, `这份数据是干净的：${JSON.stringify(rules(r))}`);
+});
+
+test('★ ghost：跨午夜的一整段（23:50→07:10）不报 ghost —— 真实数据里 28 条这种段全是正常主睡眠', () => {
+  const r = auditRecords(fx.crossMidnight());
+  assert.ok(!rules(r).some((id) => id.startsWith('records.ghost')), `跨午夜长段不该报：${JSON.stringify(rules(r))}`);
+});
+
+test('★ ghost-overlap：同夜重叠超过较短段一半 ⇒ 报 ghost-overlap，且不再重复报 records.overlap', () => {
+  const r = auditRecords([
+    { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 9) }, // 480 分钟
+    { bed: fx.at(fx.d(1), 8, 10), wake: fx.at(fx.d(1), 9, 10) }, // 60 分钟，几乎全被上一条包住
+  ]);
+  const hit = r.issues.find((x) => x.ruleId === 'records.ghost-overlap');
+  assert.ok(hit, `应当报 ghost-overlap，实际：${JSON.stringify(rules(r))}`);
+  assert.ok(!rules(r).includes('records.overlap'), '同一对记录只许报一条（否则 --json 的消费者以为发现了两个问题）');
+});
+
+test('ghost：重叠不足以判"不可能独立"（1/4）时仍走泛化的 records.overlap —— 旧行为不许被改掉', () => {
+  const r = auditRecords([
+    { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 9) }, // 480
+    { bed: fx.at(fx.d(1), 8), wake: fx.at(fx.d(1), 12) }, // 240，重叠 60 < 240×0.5
+  ]);
+  assert.ok(rules(r).includes('records.overlap'));
+  assert.ok(!rules(r).includes('records.ghost-overlap'));
+});
+
+test('★ ghost 阈值边界：清醒 29 分钟报、31 分钟不报（阈值 30；真实数据最小正间隔 70 分钟 ⇒ 边际 40 分钟）', () => {
+  const mk = (gapMin) => auditRecords([
+    { bed: fx.at(fx.d(1), 1), wake: fx.at(fx.d(1), 5) },
+    { bed: fx.at(fx.d(1), 5, gapMin), wake: fx.at(fx.d(1), 11) },
+  ]);
+  assert.ok(rules(mk(29)).includes('records.ghost-fragment'), '29 < 30 ⇒ 报');
+  assert.ok(!rules(mk(31)).includes('records.ghost-fragment'), '31 > 30 ⇒ 不报');
+});
