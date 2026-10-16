@@ -108,6 +108,17 @@ All notable changes to this project are documented here. The format follows
   - **The 30-minute cut is therefore not tuned** (there is no positive sample to tune against). It is a
     semantic value with a **40-minute margin** to the smallest real gap. Real data stays on the machine:
     that audit run is one-off, and `test/audit.test.js` pins every case — the negative ones included.
+- **★ `examples/records-csv.mjs` — a generic record ↔ CSV adapter** (2026-10-16). Standard records out to
+  a CSV you can edit in a spreadsheet, and back. Two properties are **enforced rather than documented**:
+  **epoch seconds are the only truth** (the human-readable `bed_iso` / `wake_iso` columns are *ignored*
+  on import, deliberately — re-parsing an ISO string is the silent-timezone trap `TIMESTAMPS.md` spends
+  a whole page on, and this adapter must not become a new door into it), and **row-count conservation**
+  (`in = out + skipped`, a reason per skipped row, **non-zero exit** if anything was skipped — the
+  specific failure `ROADMAP.md` names for AI-written parsers).
+  Records and stages travel as **two tables** joined by `record_index`, so the round trip is
+  **reversible** rather than approximate. ✅ Verified on the private dataset: 286 records + 6488 stages
+  round-trip field-for-field (`286 = 286 + 0`). It stays in `examples/` (never in the package) and knows
+  **no vendor format**, so `NON-GOALS.md` §5 is untouched.
 
 ### Fixed
 
@@ -159,8 +170,10 @@ All notable changes to this project are documented here. The format follows
   unit" helper would hand callers exactly the rope `ROADMAP.md` warns about. Its return type is inlined
   rather than declared as a named `@typedef` for the same reason — a named type on the published surface
   would imply the function is one.
-- `scripts/verify-all.ps1`: A2 runs `test/bootstrap.test.js` (**14** test files), and **A6b** was added to
-  pin the `--ci` key set from the other side (see above).
+- `scripts/verify-all.ps1`: A2 runs `test/bootstrap.test.js` (**15** test files after the CSV adapter
+  landed), and **A6b** was added to pin the `--ci` key set from the other side (see above). **A8** now
+  also exercises the records↔CSV **round trip**, not just "it exports" — "ran" and "did not run" have to
+  stay distinguishable.
 - `scripts/verify-all.ps1` **now returns an exit code** (2026-10-16). It used to print
   `❌ 3/21 项失败` and still exit **0** — the script contained **no `exit` statement at all** — so nothing
   automated could use it as a gate, and a "gate" nothing can read is not a gate. It now returns **1**
