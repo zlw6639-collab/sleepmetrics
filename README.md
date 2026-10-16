@@ -178,6 +178,14 @@ Adapters for vendor formats (Xiaomi / Gadgetbridge / Apple Health / CSV) are del
 part of this package: mapping someone else's field names is a different job, and each source
 changes on its own schedule.
 
+> **A generic starting point ships in `examples/` (never in the package):** `records-csv.mjs` turns a
+> standard record array into a CSV you can edit in a spreadsheet — and back. Two things it does **on
+> purpose**: **epoch seconds are the only truth** (the human-readable `*_iso` columns are *ignored* on
+> import, so the timezone trap this page's neighbour documents cannot re-enter through that door), and
+> **row-count conservation is enforced** (`in = out + skipped`, with a reason per skipped row and a
+> non-zero exit if anything was skipped — a silently dropped row is the one failure that produces
+> perfectly plausible numbers).
+
 > ⚠️ **Before you write the adapter: `bed`/`wake` are epoch seconds, and getting there is the most
 > error-prone step in the pipeline.** [`TIMESTAMPS.md`](TIMESTAMPS.md) covers it with measured examples
 > and a verified snippet. The short version: **only a bare `YYYY-MM-DD` parses as UTC** — every other

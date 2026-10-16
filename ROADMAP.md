@@ -6,7 +6,6 @@ and the last section lists what will **not** happen.
 ## Next
 
 
-- [ ] **Adapters** — generic JSON → CSV first; vendor formats only when somebody actually asks.
 - [ ] **A "write your own adapter with a local AI" prompt template** (2026-10-14).
       Vendor exports are frequently **gigabytes** — far too large to paste into a web chat — while a
       local IDE agent (Cursor / Claude Code) can read them **in a streaming pass** and emit the standard
@@ -178,6 +177,21 @@ and the last section lists what will **not** happen.
       sleep's wake**, the same one `sriLastN()` uses (one anchor, not two); and the command **refuses
       `--json` visibly** instead of ignoring it, because `--json`'s key set is a machine contract
       (`AGENTS.md` 4) and a silent no-op would let a script author believe they got JSON.
+- [x] **Adapters — generic JSON → CSV** (2026-10-16). `examples/records-csv.mjs` turns a standard record
+      array into CSV and back. Records and stages ship as **two tables** (`record_index` joins them), so
+      the round trip is **reversible** rather than approximate.
+      ✅ **Two properties are enforced, not merely documented:**
+      · **Epoch seconds are the only truth.** The human-readable `bed_iso` / `wake_iso` columns exist so a
+        spreadsheet shows a bedtime instead of an epoch number, and they are **ignored on import —
+        deliberately**. Re-parsing an ISO string is exactly the silent-timezone trap `TIMESTAMPS.md`
+        spends a page on, and this adapter must not become a new door into it. A test pins that a *wrong*
+        `*_iso` changes nothing.
+      · **Row-count conservation.** `from-csv` prints `in = out + skipped` with a reason per skipped row
+        and **exits non-zero if anything was skipped**. That is the failure this project keeps naming: a
+        converter that quietly drops rows yields numbers that look perfectly fine.
+      ✅ **Verified on the private dataset:** 286 records + 6488 stages round-trip field-for-field
+      (`286 = 286 + 0`), and the skip path is exercised by tests (bad rows; stages pointing at a dropped
+      record). Vendor formats stay unbuilt until somebody asks (`NON-GOALS.md` §5).
 
 ## Later / on demand
 

@@ -27,7 +27,7 @@ foreach ($f in $srcFiles) { node --check $f.FullName 2>&1 | Out-Null; if ($LASTE
 Check 'A1 语法门' ($syntaxBad.Count -eq 0) "$($srcFiles.Count) 个文件，失败 $(($syntaxBad -join ','))"
 
 # A2 全部测试
-$tests = @('time', 'records', 'contract', 'sri', 'bootstrap', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'heatmap', 'aside-guard', 'anchor-synthetic', 'regression')
+$tests = @('time', 'records', 'contract', 'sri', 'bootstrap', 'phase', 'rest', 'suggest', 'audit', 'rhythm', 'heatmap', 'aside-guard', 'anchor-synthetic', 'records-csv', 'regression')
 $testBad = @()
 foreach ($t in $tests) { node "test\$t.test.js" > $null 2>&1; if ($LASTEXITCODE -ne 0) { $testBad += $t } }
 Check 'A2 测试' ($testBad.Count -eq 0) "$($tests.Count) 个文件，失败 $(($testBad -join ','))"
@@ -85,8 +85,13 @@ $exOk = $false; $exDetail = '(未跑)'
 if (Test-Path $rec) {
   node examples\export-for-r.mjs $rec --holidays data\holidays.json --window 400 > $null 2>&1; $e1 = $LASTEXITCODE
   node examples\push-ntfy.mjs $rec --dry-run > $null 2>&1; $e2 = $LASTEXITCODE
-  $exOk = ($e1 -eq 0) -and ($e2 -eq 0)
-  $exDetail = "export-for-r=$e1 · push-ntfy(--dry-run)=$e2"
+  # A8 还跑**往返**（2026-10-16 加）：这个适配器的卖点是**可逆 + 守恒**，只验"导得出去"不够。
+  # ⚠️ `--stages` 只在真的产出了 stages.csv 时传 —— 没分段的数据不该因为这个参数去读一个不存在的文件。
+  node examples\records-csv.mjs to-csv $rec --out-dir "$env:TEMP\v_csv" > $null 2>&1; $e3 = $LASTEXITCODE
+  $stgArgs = if (Test-Path "$env:TEMP\v_csv\stages.csv") { @('--stages', "$env:TEMP\v_csv\stages.csv") } else { @() }
+  node examples\records-csv.mjs from-csv "$env:TEMP\v_csv\records.csv" @stgArgs > $null 2>&1; $e4 = $LASTEXITCODE
+  $exOk = ($e1 -eq 0) -and ($e2 -eq 0) -and ($e3 -eq 0) -and ($e4 -eq 0)
+  $exDetail = "export-for-r=$e1 · push-ntfy(--dry-run)=$e2 · records-csv 往返=$e3/$e4"
 }
 Check 'A8 examples' $exOk $exDetail
 
